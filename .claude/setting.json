@@ -1,0 +1,10 @@
+{
+    "enabledPlugins": {
+        "typescript-lsp@caude-plugins-official": true
+    },
+    "env": {
+      "ENABLE_TOOLS_SEARCH": "true",
+      "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    },
+    "teammateMode": "tmux"
+}

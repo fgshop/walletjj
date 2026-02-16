@@ -1,0 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  name            String
+  phone           String?
+  isEmailVerified Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  isSuspended     Boolean   @default(false)
+  suspendReason   String?
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  wallet               Wallet?
+  sessions             Session[]
+  sentTransactions     Transaction[] @relation("SentTransactions")
+  receivedTransactions Transaction[] @relation("ReceivedTransactions")
+  withdrawalRequests   WithdrawalRequest[]
+  notifications        Notification[]
+
+  @@index([email])
+  @@index([isActive, createdAt])
+  @@index([deletedAt])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique
+  platform     Platform
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
+  @@index([expiresAt])
+}
+
+// ─── Wallet ──────────────────────────────────────
+
+model Wallet {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address         String    @unique
+  encryptedKey    String    @db.Text
+  derivationIndex Int
+  isLocked        Boolean   @default(false)
+  lockedAt        DateTime?
+  lockedBy        String?
+  lockReason      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([address])
+  @@index([isLocked])
+}
+
+model MasterWallet {
+  id            String   @id @default(cuid())
+  address       String   @unique
+  encryptedSeed String   @db.Text
+  encryptedKey  String   @db.Text
+  nextIndex     Int      @default(0)
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── Transaction ─────────────────────────────────
+
+model Transaction {
+  id            String    @id @default(cuid())
+  txHash        String?   @unique
+  type          TxType
+  fromUserId    String?
+  fromUser      User?     @relation("SentTransactions", fields: [fromUserId], references: [id])
+  toUserId      String?
+  toUser        User?     @relation("ReceivedTransactions", fields: [toUserId], references: [id])
+  fromAddress   String
+  toAddress     String
+  amount        String
+  tokenAddress  String?
+  tokenSymbol   String    @default("TRX")
+  tokenDecimals Int       @default(6)
+  fee           String?
+  status        TxStatus  @default(PENDING)
+  blockNumber   BigInt?
+  confirmedAt   DateTime?
+  memo          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  withdrawalRequest WithdrawalRequest?
+
+  @@index([fromUserId, createdAt])
+  @@index([toUserId, createdAt])
+  @@index([fromAddress])
+  @@index([toAddress])
+  @@index([txHash])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
+// ─── Withdrawal Approval ─────────────────────────
+
+model WithdrawalRequest {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  transactionId   String?          @unique
+  transaction     Transaction?     @relation(fields: [transactionId], references: [id])
+  toAddress       String
+  amount          String
+  tokenAddress    String?
+  tokenSymbol     String           @default("TRX")
+  status          WithdrawalStatus @default(PENDING_24H)
+  isFirstExternal Boolean          @default(false)
+  availableAt     DateTime
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  completedAt     DateTime?
+  failReason      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([availableAt])
+  @@index([reviewedBy])
+}
+
+// ─── Token Registry ──────────────────────────────
+
+model SupportedToken {
+  id              String   @id @default(cuid())
+  contractAddress String   @unique
+  symbol          String
+  name            String
+  decimals        Int
+  iconUrl         String?
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+// ─── Price ───────────────────────────────────────
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  symbol    String
+  priceUsd  Decimal  @db.Decimal(20, 8)
+  volume24h Decimal? @db.Decimal(20, 2)
+  change24h Decimal? @db.Decimal(10, 4)
+  timestamp DateTime
+  createdAt DateTime @default(now())
+
+  @@index([symbol, timestamp])
+  @@unique([symbol, timestamp])
+}
+
+// ─── Admin ───────────────────────────────────────
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         AdminRole
+  totpSecret   String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  auditLogs    AuditLog[]
+
+  @@index([email])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  adminId    String
+  admin      AdminUser @relation(fields: [adminId], references: [id])
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String
+  createdAt  DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([action, createdAt])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+}
+
+// ─── Notifications ───────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  Platform
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ─── System ──────────────────────────────────────
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// ─── Enums ───────────────────────────────────────
+
+enum Platform {
+  WEB
+  MOBILE_IOS
+  MOBILE_ANDROID
+  ADMIN
+}
+
+enum TxType {
+  INTERNAL
+  EXTERNAL_SEND
+  EXTERNAL_RECEIVE
+  DEPOSIT
+}
+
+enum TxStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum WithdrawalStatus {
+  PENDING_24H
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum NotificationType {
+  DEPOSIT
+  SEND_COMPLETE
+  RECEIVE
+  WITHDRAWAL_PENDING
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_REJECTED
+  WITHDRAWAL_COMPLETE
+  WALLET_LOCKED
+  WALLET_UNLOCKED
+  SYSTEM
+  PRICE_ALERT
+}
