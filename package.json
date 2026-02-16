@@ -25,7 +25,8 @@
       "@prisma/engines",
       "prisma",
       "@nestjs/core",
-      "sharp"
+      "sharp",
+      "bcrypt"
     ]
   }
 }

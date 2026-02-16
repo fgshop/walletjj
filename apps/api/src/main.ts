@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +23,9 @@ async function bootstrap() {
     }),
   );
 
+  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalInterceptors(new TransformInterceptor());
+
   const config = new DocumentBuilder()
     .setTitle('JOJUWallet API')
     .setDescription('TRON TRC-20 Custodial Wallet API')
@@ -32,7 +37,7 @@ async function bootstrap() {
 
   const port = process.env.API_PORT || 4000;
   await app.listen(port);
-  console.log(`🚀 JOJUWallet API running on http://localhost:${port}`);
-  console.log(`📄 Swagger docs at http://localhost:${port}/api/docs`);
+  console.log(`JOJUWallet API running on http://localhost:${port}`);
+  console.log(`Swagger docs at http://localhost:${port}/api/docs`);
 }
 bootstrap();

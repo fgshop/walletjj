@@ -41,7 +41,7 @@ model Session {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshToken String   @unique
+  refreshToken String   @unique @db.VarChar(500)
   platform     Platform
   deviceInfo   String?
   ipAddress    String?
