@@ -2,12 +2,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { CryptoService } from './crypto/crypto.service';
+import { TronService } from './tron/tron.service';
 
 @Injectable()
 export class WalletService {
@@ -18,14 +18,10 @@ export class WalletService {
     private readonly redis: RedisService,
     private readonly configService: ConfigService,
     private readonly cryptoService: CryptoService,
+    private readonly tronService: TronService,
   ) {}
 
-  /**
-   * Create a TRON wallet for a new user.
-   * Called automatically after login if the user doesn't have a wallet.
-   */
   async createWalletForUser(userId: string): Promise<{ address: string }> {
-    // Check if user already has a wallet
     const existing = await this.prisma.wallet.findUnique({
       where: { userId },
     });
@@ -33,7 +29,6 @@ export class WalletService {
       return { address: existing.address };
     }
 
-    // Get or create master wallet
     let masterWallet = await this.prisma.masterWallet.findFirst({
       where: { isActive: true },
     });
@@ -42,21 +37,16 @@ export class WalletService {
       masterWallet = await this.initializeMasterWallet();
     }
 
-    // Decrypt master seed
     const mnemonic = this.cryptoService.decrypt(masterWallet.encryptedSeed);
     const seed = this.cryptoService.mnemonicToSeed(mnemonic);
 
-    // Derive child key at next index
     const index = masterWallet.nextIndex;
     const { privateKey } = this.cryptoService.deriveChildKey(seed, index);
 
-    // Generate TRON address
     const address = this.cryptoService.privateKeyToTronAddress(privateKey);
 
-    // Encrypt private key for storage
     const encryptedKey = this.cryptoService.encrypt(privateKey.toString('hex'));
 
-    // Save wallet and increment index in a transaction
     await this.prisma.$transaction([
       this.prisma.wallet.create({
         data: {
@@ -77,9 +67,6 @@ export class WalletService {
     return { address };
   }
 
-  /**
-   * Get wallet info for the current user.
-   */
   async getWallet(userId: string) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -100,10 +87,6 @@ export class WalletService {
     return wallet;
   }
 
-  /**
-   * Get balance for the user's wallet (TRX + TRC-20 tokens).
-   * Results are cached in Redis for 30 seconds.
-   */
   async getBalance(userId: string) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -114,25 +97,19 @@ export class WalletService {
       throw new NotFoundException('Wallet not found');
     }
 
-    // Check Redis cache
     const cacheKey = `balance:${wallet.address}`;
     const cached = await this.redis.get(cacheKey);
     if (cached) {
       return JSON.parse(cached);
     }
 
-    // Fetch TRX balance from TRON network
     const balances = await this.fetchBalancesFromNetwork(wallet.address);
 
-    // Cache for 30 seconds
     await this.redis.set(cacheKey, JSON.stringify(balances), 30);
 
     return balances;
   }
 
-  /**
-   * Ensure user has a wallet - called after login.
-   */
   async ensureWallet(userId: string): Promise<void> {
     const existing = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -143,21 +120,8 @@ export class WalletService {
   }
 
   private async fetchBalancesFromNetwork(address: string) {
-    const tronHost = this.configService.get<string>(
-      'TRON_FULL_HOST',
-      'https://api.shasta.trongrid.io',
-    );
-    const apiKey = this.configService.get<string>('TRON_API_KEY', '');
-
     try {
-      const { TronWeb } = require('tronweb');
-      const tronWeb = new TronWeb({
-        fullHost: tronHost,
-        headers: apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {},
-      });
-
-      // Get TRX balance
-      const trxBalance = await tronWeb.trx.getBalance(address);
+      const trxBalance = await this.tronService.getBalance(address);
 
       const balances: Array<{
         symbol: string;
@@ -167,12 +131,11 @@ export class WalletService {
       }> = [
         {
           symbol: 'TRX',
-          balance: trxBalance.toString(),
+          balance: trxBalance,
           decimals: 6,
         },
       ];
 
-      // Get TRC-20 balances from supported tokens
       const tokens = await this.prisma.supportedToken.findMany({
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
@@ -180,12 +143,14 @@ export class WalletService {
 
       for (const token of tokens) {
         try {
-          const contract = await tronWeb.contract().at(token.contractAddress);
-          const balance = await contract.balanceOf(address).call();
+          const balance = await this.tronService.getTrc20Balance(
+            address,
+            token.contractAddress,
+          );
           balances.push({
             symbol: token.symbol,
             contractAddress: token.contractAddress,
-            balance: balance.toString(),
+            balance,
             decimals: token.decimals,
           });
         } catch (err) {
@@ -198,7 +163,6 @@ export class WalletService {
       return { address, balances };
     } catch (err) {
       this.logger.error(`Failed to fetch balances for ${address}: ${err}`);
-      // Return zero balances on error
       return {
         address,
         balances: [{ symbol: 'TRX', balance: '0', decimals: 6 }],
@@ -210,7 +174,6 @@ export class WalletService {
     const mnemonic = this.cryptoService.generateMnemonic();
     const seed = this.cryptoService.mnemonicToSeed(mnemonic);
 
-    // Derive the master address (index 0 is used as hot wallet address)
     const { privateKey } = this.cryptoService.deriveChildKey(seed, 0);
     const address = this.cryptoService.privateKeyToTronAddress(privateKey);
 
@@ -222,7 +185,7 @@ export class WalletService {
         address,
         encryptedSeed,
         encryptedKey,
-        nextIndex: 1, // 0 is used by master
+        nextIndex: 1,
         description: 'Auto-generated master wallet',
       },
     });
