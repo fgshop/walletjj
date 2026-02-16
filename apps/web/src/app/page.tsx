@@ -1,26 +1,23 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { isAuthenticated } from '@/lib/auth';
+
 export default function Home() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isAuthenticated()) {
+      router.replace('/dashboard');
+    } else {
+      router.replace('/login');
+    }
+  }, [router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-primary text-white">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold tracking-tight">JOJUWallet</h1>
-        <p className="mt-4 text-lg text-gray-300">
-          TRON 네트워크 기반 TRC-20 지갑 플랫폼
-        </p>
-        <div className="mt-8 flex gap-4 justify-center">
-          <a
-            href="/login"
-            className="rounded-lg bg-accent-light px-6 py-3 font-semibold text-white transition hover:opacity-90"
-          >
-            시작하기
-          </a>
-          <a
-            href="/features"
-            className="rounded-lg border border-white/20 px-6 py-3 font-semibold text-white transition hover:bg-white/10"
-          >
-            기능 소개
-          </a>
-        </div>
-      </div>
+    <main className="flex min-h-screen items-center justify-center bg-primary">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent" />
     </main>
   );
 }

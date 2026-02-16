@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private client: Redis | null = null;
+  private errorLogged = false;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -14,17 +15,24 @@ export class RedisService implements OnModuleDestroy {
       const url = this.configService.get<string>('REDIS_URL', 'redis://localhost:6379');
       this.client = new Redis(url, {
         lazyConnect: true,
-        maxRetriesPerRequest: 3,
-        retryStrategy(times) {
+        maxRetriesPerRequest: 1,
+        retryStrategy: (times) => {
           if (times > 3) return null;
-          return Math.min(times * 200, 2000);
+          return Math.min(times * 500, 3000);
         },
+        reconnectOnError: () => false,
       });
       this.client.on('error', (err) => {
-        this.logger.warn(`Redis connection error: ${err.message}`);
+        if (!this.errorLogged) {
+          this.logger.warn(`Redis not available: ${err.message}. Running without cache.`);
+          this.errorLogged = true;
+        }
       });
       this.client.connect().catch((err) => {
-        this.logger.warn(`Redis not available: ${err.message}. Running without cache.`);
+        if (!this.errorLogged) {
+          this.logger.warn(`Redis not available: ${err.message}. Running without cache.`);
+          this.errorLogged = true;
+        }
       });
     }
     return this.client;

@@ -18,8 +18,14 @@ import { AdminWithdrawalsService } from './admin-withdrawals/admin-withdrawals.s
 import { AdminDashboardController } from './admin-dashboard/admin-dashboard.controller';
 import { AdminDashboardService } from './admin-dashboard/admin-dashboard.service';
 
+import { AdminAuditController } from './admin-audit/admin-audit.controller';
+
+import { AdminTokensController } from './admin-tokens/admin-tokens.controller';
+import { AdminTokensService } from './admin-tokens/admin-tokens.service';
+
 import { AuditModule } from '../audit/audit.module';
 import { NotificationModule } from '../notification/notification.module';
+import { QueueModule } from '../queue/queue.module';
 
 @Module({
   imports: [
@@ -27,6 +33,7 @@ import { NotificationModule } from '../notification/notification.module';
     JwtModule.register({}),
     AuditModule,
     NotificationModule,
+    QueueModule,
   ],
   controllers: [
     AdminAuthController,
@@ -34,6 +41,8 @@ import { NotificationModule } from '../notification/notification.module';
     AdminWalletsController,
     AdminWithdrawalsController,
     AdminDashboardController,
+    AdminAuditController,
+    AdminTokensController,
   ],
   providers: [
     AdminAuthService,
@@ -42,6 +51,7 @@ import { NotificationModule } from '../notification/notification.module';
     AdminWalletsService,
     AdminWithdrawalsService,
     AdminDashboardService,
+    AdminTokensService,
   ],
 })
 export class AdminModule {}

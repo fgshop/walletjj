@@ -15,6 +15,7 @@ import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BlockchainModule } from './modules/blockchain/blockchain.module';
+import { EmailModule } from './modules/email/email.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -37,6 +38,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     AuditModule,
     AdminModule,
     BlockchainModule,
+    EmailModule,
   ],
   providers: [
     {

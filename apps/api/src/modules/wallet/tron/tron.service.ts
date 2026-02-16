@@ -68,8 +68,81 @@ export class TronService {
     return block.block_header?.raw_data?.number ?? 0;
   }
 
+  async getBlockByNumber(blockNumber: number): Promise<any> {
+    return this.tronWeb.trx.getBlock(blockNumber);
+  }
+
+  async getTrc20TransferEvents(
+    contractAddress: string,
+    options: { minBlockTimestamp: number; maxBlockTimestamp: number },
+  ): Promise<any[]> {
+    try {
+      const events = await this.tronWeb.event.getEventsByContractAddress(
+        contractAddress,
+        {
+          eventName: 'Transfer',
+          minBlockTimestamp: options.minBlockTimestamp,
+          maxBlockTimestamp: options.maxBlockTimestamp,
+          limit: 200,
+        },
+      );
+      return events.data || events || [];
+    } catch (err) {
+      this.logger.warn(`Failed to fetch TRC-20 events: ${err}`);
+      return [];
+    }
+  }
+
   isAddressValid(address: string): boolean {
     return this.tronWeb.isAddress(address);
+  }
+
+  /** Fetch on-chain TRX transaction history for an address via TronGrid API */
+  async getAccountTransactions(
+    address: string,
+    options?: { limit?: number; onlyTo?: boolean },
+  ): Promise<any[]> {
+    const limit = options?.limit ?? 50;
+    const fullHost = this.configService.get<string>('TRON_FULL_HOST', 'https://api.shasta.trongrid.io');
+    const apiKey = this.configService.get<string>('TRON_API_KEY', '');
+    const onlyTo = options?.onlyTo ? '&only_to=true' : '';
+    const url = `${fullHost}/v1/accounts/${address}/transactions?limit=${limit}${onlyTo}`;
+
+    try {
+      const fetch = globalThis.fetch;
+      const headers: Record<string, string> = { 'Accept': 'application/json' };
+      if (apiKey) headers['TRON-PRO-API-KEY'] = apiKey;
+      const resp = await (fetch as any)(url, { headers });
+      const json = await resp.json();
+      return json.data ?? [];
+    } catch (err) {
+      this.logger.warn(`Failed to fetch account transactions for ${address}: ${err}`);
+      return [];
+    }
+  }
+
+  /** Fetch on-chain TRC-20 transfer history for an address via TronGrid API */
+  async getAccountTrc20Transactions(
+    address: string,
+    options?: { limit?: number; onlyTo?: boolean },
+  ): Promise<any[]> {
+    const limit = options?.limit ?? 50;
+    const fullHost = this.configService.get<string>('TRON_FULL_HOST', 'https://api.shasta.trongrid.io');
+    const apiKey = this.configService.get<string>('TRON_API_KEY', '');
+    const onlyTo = options?.onlyTo ? '&only_to=true' : '';
+    const url = `${fullHost}/v1/accounts/${address}/transactions/trc20?limit=${limit}${onlyTo}`;
+
+    try {
+      const fetch = globalThis.fetch;
+      const headers: Record<string, string> = { 'Accept': 'application/json' };
+      if (apiKey) headers['TRON-PRO-API-KEY'] = apiKey;
+      const resp = await (fetch as any)(url, { headers });
+      const json = await resp.json();
+      return json.data ?? [];
+    } catch (err) {
+      this.logger.warn(`Failed to fetch TRC-20 transactions for ${address}: ${err}`);
+      return [];
+    }
   }
 
   private createSigningInstance(privateKey: string): any {

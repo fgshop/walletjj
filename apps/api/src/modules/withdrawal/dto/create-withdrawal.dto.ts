@@ -12,12 +12,12 @@ export class CreateWithdrawalDto {
   @IsString()
   amount: string;
 
-  @ApiPropertyOptional({ description: 'Token symbol', default: 'TRX' })
+  @ApiPropertyOptional({ description: 'Token symbol', default: 'JOJU' })
   @IsOptional()
   @IsString()
   tokenSymbol?: string;
 
-  @ApiPropertyOptional({ description: 'TRC-20 contract address (null for TRX)' })
+  @ApiPropertyOptional({ description: 'TRC-20 contract address (null for JOJU)' })
   @IsOptional()
   @IsString()
   tokenAddress?: string;

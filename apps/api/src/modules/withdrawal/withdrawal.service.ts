@@ -51,7 +51,7 @@ export class WithdrawalService {
     }
 
     // 4. Check balance
-    const tokenSymbol = dto.tokenSymbol || 'TRX';
+    const tokenSymbol = dto.tokenSymbol || 'JOJU';
     let currentBalance: string;
     if (dto.tokenAddress) {
       currentBalance = await this.tronService.getTrc20Balance(

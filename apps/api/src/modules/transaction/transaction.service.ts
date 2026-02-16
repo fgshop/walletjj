@@ -74,7 +74,7 @@ export class TransactionService {
     }
 
     // 5. Check on-chain balance
-    const tokenSymbol = dto.tokenSymbol || 'TRX';
+    const tokenSymbol = dto.tokenSymbol || 'JOJU';
     let currentBalance: string;
     if (dto.tokenAddress) {
       currentBalance = await this.tronService.getTrc20Balance(
@@ -152,7 +152,17 @@ export class TransactionService {
       if (endDate) where.createdAt.lte = new Date(endDate);
     }
 
-    const [items, total] = await Promise.all([
+    // Fetch pending withdrawal requests (not yet linked to Transaction)
+    const includeWithdrawals = !type || type === 'EXTERNAL_SEND';
+    // Fetch on-chain deposits when not filtered to other types
+    const includeDeposits = !type || type === 'EXTERNAL_RECEIVE' || type === 'DEPOSIT';
+
+    // Get wallet address for on-chain queries
+    const wallet = includeDeposits
+      ? await this.prisma.wallet.findUnique({ where: { userId }, select: { address: true } })
+      : null;
+
+    const [items, total, withdrawals] = await Promise.all([
       this.prisma.transaction.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -160,15 +170,202 @@ export class TransactionService {
         take: limit,
       }),
       this.prisma.transaction.count({ where }),
+      includeWithdrawals
+        ? this.prisma.withdrawalRequest.findMany({
+            where: {
+              userId,
+              transactionId: null,
+              ...(startDate || endDate
+                ? {
+                    createdAt: {
+                      ...(startDate && { gte: new Date(startDate) }),
+                      ...(endDate && { lte: new Date(endDate) }),
+                    },
+                  }
+                : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
     ]);
 
+    // Collect existing txHashes for dedup
+    const existingTxHashes = new Set(
+      items.filter((i) => i.txHash).map((i) => i.txHash),
+    );
+
+    // Fetch on-chain deposits (TRX + TRC-20)
+    let onChainDeposits: Array<{
+      id: string;
+      txHash: string;
+      type: 'EXTERNAL_RECEIVE';
+      fromUserId: null;
+      toUserId: string;
+      fromAddress: string;
+      toAddress: string;
+      amount: string;
+      tokenAddress: string | null;
+      tokenSymbol: string;
+      tokenDecimals: number;
+      fee: null;
+      status: 'CONFIRMED';
+      withdrawalStatus: null;
+      blockNumber: number | null;
+      confirmedAt: Date;
+      memo: null;
+      createdAt: Date;
+      updatedAt: Date;
+      _isWithdrawalRequest: false;
+      _isOnChainDeposit: true;
+    }> = [];
+
+    if (includeDeposits && wallet?.address) {
+      try {
+        const [trxTxs, trc20Txs] = await Promise.all([
+          this.tronService.getAccountTransactions(wallet.address, { limit: 50, onlyTo: true }),
+          this.tronService.getAccountTrc20Transactions(wallet.address, { limit: 50, onlyTo: true }),
+        ]);
+
+        // Process TRX incoming transactions
+        for (const tx of trxTxs) {
+          const txId = tx.txID;
+          if (!txId || existingTxHashes.has(txId)) continue;
+
+          // Parse TRX TransferContract
+          const contract = tx.raw_data?.contract?.[0];
+          if (!contract || contract.type !== 'TransferContract') continue;
+          const value = contract.parameter?.value;
+          if (!value) continue;
+
+          const toAddr = this.tronWeb_addressFromHex(value.to_address);
+          if (toAddr !== wallet.address) continue;
+
+          const fromAddr = this.tronWeb_addressFromHex(value.owner_address);
+          const amountSun = value.amount ?? 0;
+          const amountTrx = (amountSun / 1_000_000).toString();
+          const timestamp = tx.block_timestamp ?? tx.raw_data?.timestamp ?? Date.now();
+
+          existingTxHashes.add(txId);
+          onChainDeposits.push({
+            id: `onchain-${txId}`,
+            txHash: txId,
+            type: 'EXTERNAL_RECEIVE' as const,
+            fromUserId: null,
+            toUserId: userId,
+            fromAddress: fromAddr,
+            toAddress: toAddr,
+            amount: amountTrx,
+            tokenAddress: null,
+            tokenSymbol: 'JOJU',
+            tokenDecimals: 6,
+            fee: null,
+            status: 'CONFIRMED' as const,
+            withdrawalStatus: null,
+            blockNumber: null,
+            confirmedAt: new Date(timestamp),
+            memo: null,
+            createdAt: new Date(timestamp),
+            updatedAt: new Date(timestamp),
+            _isWithdrawalRequest: false,
+            _isOnChainDeposit: true,
+          });
+        }
+
+        // Process TRC-20 incoming transactions
+        for (const tx of trc20Txs) {
+          const txId = tx.transaction_id;
+          if (!txId || existingTxHashes.has(txId)) continue;
+
+          if (tx.to !== wallet.address) continue;
+
+          const decimals = tx.token_info?.decimals ?? 6;
+          const rawAmount = tx.value ?? '0';
+          const amount = (Number(rawAmount) / Math.pow(10, decimals)).toString();
+          const timestamp = tx.block_timestamp ?? Date.now();
+
+          existingTxHashes.add(txId);
+          onChainDeposits.push({
+            id: `onchain-${txId}`,
+            txHash: txId,
+            type: 'EXTERNAL_RECEIVE' as const,
+            fromUserId: null,
+            toUserId: userId,
+            fromAddress: tx.from ?? '',
+            toAddress: tx.to,
+            amount,
+            tokenAddress: tx.token_info?.address ?? null,
+            tokenSymbol: tx.token_info?.symbol ?? 'TRC20',
+            tokenDecimals: decimals,
+            fee: null,
+            status: 'CONFIRMED' as const,
+            withdrawalStatus: null,
+            blockNumber: null,
+            confirmedAt: new Date(timestamp),
+            memo: null,
+            createdAt: new Date(timestamp),
+            updatedAt: new Date(timestamp),
+            _isWithdrawalRequest: false,
+            _isOnChainDeposit: true,
+          });
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to fetch on-chain deposits: ${err}`);
+      }
+    }
+
+    // Map withdrawal requests to a transaction-like shape
+    const withdrawalItems = withdrawals.map((w) => ({
+      id: w.id,
+      txHash: null,
+      type: 'EXTERNAL_SEND' as const,
+      fromUserId: w.userId,
+      toUserId: null,
+      fromAddress: '',
+      toAddress: w.toAddress,
+      amount: w.amount,
+      tokenAddress: w.tokenAddress,
+      tokenSymbol: w.tokenSymbol,
+      tokenDecimals: 6,
+      fee: null,
+      status: 'PENDING' as const,
+      withdrawalStatus: w.status,
+      blockNumber: null,
+      confirmedAt: w.completedAt,
+      memo: null,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt,
+      _isWithdrawalRequest: true,
+      _isOnChainDeposit: false,
+    }));
+
+    // Merge and sort by date
+    const merged = [
+      ...items.map((i) => ({ ...i, _isWithdrawalRequest: false, _isOnChainDeposit: false })),
+      ...withdrawalItems,
+      ...onChainDeposits,
+    ]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+
+    const totalCount = total + withdrawals.length + onChainDeposits.length;
+
     return {
-      items,
-      total,
+      items: merged,
+      total: totalCount,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(totalCount / limit),
     };
+  }
+
+  /** Convert hex address to Base58 TRON address */
+  private tronWeb_addressFromHex(hex: string): string {
+    try {
+      const { TronWeb } = require('tronweb');
+      return TronWeb.address.fromHex(hex);
+    } catch {
+      return hex;
+    }
   }
 
   async getTransactionById(userId: string, id: string) {

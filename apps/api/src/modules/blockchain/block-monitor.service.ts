@@ -1,9 +1,17 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TronService } from '../wallet/tron/tron.service';
 import { NotificationService } from '../notification/notification.service';
 import { TxType, TxStatus } from '@prisma/client';
+
+const { TronWeb } = require('tronweb');
+
+const MAX_BLOCKS_PER_POLL = 10;
+const ADDRESS_REFRESH_INTERVAL = 60_000;
+// transfer(address,uint256) method signature
+const TRANSFER_METHOD_ID = 'a9059cbb';
 
 @Injectable()
 export class BlockMonitorService implements OnModuleInit {
@@ -11,11 +19,27 @@ export class BlockMonitorService implements OnModuleInit {
   private isProcessing = false;
   private lastProcessedBlock = 0;
 
+  private walletAddresses: Set<string> = new Set();
+  private lastAddressRefresh = 0;
+  private enabled = true;
+
+  // Map contract address → { symbol, decimals }
+  private supportedTokens: Map<
+    string,
+    { symbol: string; decimals: number }
+  > = new Map();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tronService: TronService,
     private readonly notificationService: NotificationService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    const apiKey = this.configService.get<string>('TRON_API_KEY', '');
+    if (!apiKey) {
+      this.enabled = false;
+    }
+  }
 
   async onModuleInit() {
     const config = await this.prisma.systemConfig.findUnique({
@@ -24,6 +48,15 @@ export class BlockMonitorService implements OnModuleInit {
     if (config) {
       this.lastProcessedBlock = parseInt(config.value, 10);
     }
+
+    await this.refreshWalletAddresses();
+    await this.refreshSupportedTokens();
+
+    if (!this.enabled) {
+      this.logger.warn('Block monitor disabled — TRON_API_KEY not set');
+      return;
+    }
+
     this.logger.log(
       `Block monitor initialized. Last processed block: ${this.lastProcessedBlock}`,
     );
@@ -31,7 +64,7 @@ export class BlockMonitorService implements OnModuleInit {
 
   @Cron('*/10 * * * * *')
   async pollBlocks() {
-    if (this.isProcessing) return;
+    if (!this.enabled || this.isProcessing) return;
     this.isProcessing = true;
 
     try {
@@ -40,18 +73,29 @@ export class BlockMonitorService implements OnModuleInit {
         return;
       }
 
-      // Process blocks from lastProcessedBlock+1 to currentBlock
-      // For now, just track the block number. Full event parsing will be implemented later.
+      await this.refreshWalletAddresses();
+
+      if (this.walletAddresses.size === 0) {
+        this.lastProcessedBlock = currentBlock;
+        await this.saveLastProcessedBlock(currentBlock);
+        return;
+      }
+
+      const endBlock = Math.min(
+        this.lastProcessedBlock + MAX_BLOCKS_PER_POLL,
+        currentBlock,
+      );
+
       for (
         let blockNum = this.lastProcessedBlock + 1;
-        blockNum <= currentBlock;
+        blockNum <= endBlock;
         blockNum++
       ) {
         await this.processBlock(blockNum);
       }
 
-      this.lastProcessedBlock = currentBlock;
-      await this.saveLastProcessedBlock(currentBlock);
+      this.lastProcessedBlock = endBlock;
+      await this.saveLastProcessedBlock(endBlock);
     } catch (err) {
       this.logger.error(`Block polling error: ${err}`);
     } finally {
@@ -59,13 +103,169 @@ export class BlockMonitorService implements OnModuleInit {
     }
   }
 
+  private async refreshWalletAddresses() {
+    if (Date.now() - this.lastAddressRefresh < ADDRESS_REFRESH_INTERVAL) return;
+
+    const wallets = await this.prisma.wallet.findMany({
+      select: { address: true },
+    });
+    this.walletAddresses = new Set(wallets.map((w) => w.address));
+    this.lastAddressRefresh = Date.now();
+  }
+
+  private async refreshSupportedTokens() {
+    const tokens = await this.prisma.supportedToken.findMany({
+      where: { isActive: true },
+    });
+    this.supportedTokens.clear();
+    for (const token of tokens) {
+      this.supportedTokens.set(token.contractAddress, {
+        symbol: token.symbol,
+        decimals: token.decimals,
+      });
+    }
+  }
+
   private async processBlock(blockNumber: number) {
-    // Scaffold: In the future, this will:
-    // 1. Fetch block transactions from TronWeb
-    // 2. Filter for TRC-20 Transfer events to our wallet addresses
-    // 3. Create Transaction(DEPOSIT) records
-    // 4. Send DEPOSIT notifications
-    this.logger.debug(`Processing block ${blockNumber} (scaffold)`);
+    let block: any;
+    try {
+      block = await this.tronService.getBlockByNumber(blockNumber);
+    } catch (err) {
+      this.logger.warn(`Failed to fetch block ${blockNumber}: ${err}`);
+      return;
+    }
+
+    const transactions = block?.transactions || [];
+
+    for (const tx of transactions) {
+      const contract = tx?.raw_data?.contract?.[0];
+      if (!contract) continue;
+
+      const txHash = tx.txID;
+
+      if (contract.type === 'TransferContract') {
+        // Native TRX transfer
+        await this.handleTrxTransfer(txHash, contract.parameter?.value);
+      } else if (contract.type === 'TriggerSmartContract') {
+        // Possible TRC-20 transfer
+        await this.handleSmartContractTx(txHash, contract.parameter?.value);
+      }
+    }
+  }
+
+  private async handleTrxTransfer(
+    txHash: string,
+    value: { owner_address: string; to_address: string; amount: number } | undefined,
+  ) {
+    if (!value) return;
+
+    const toAddress = this.hexToBase58(value.to_address);
+    if (!this.walletAddresses.has(toAddress)) return;
+
+    const fromAddress = this.hexToBase58(value.owner_address);
+    const amount = value.amount.toString();
+
+    await this.createDepositTransaction({
+      txHash,
+      fromAddress,
+      toAddress,
+      amount,
+      tokenSymbol: 'JOJU',
+      tokenAddress: null,
+    });
+  }
+
+  private async handleSmartContractTx(
+    txHash: string,
+    value: { owner_address: string; contract_address: string; data: string } | undefined,
+  ) {
+    if (!value?.data) return;
+
+    const data = value.data;
+    // Check if this is a transfer(address,uint256) call
+    if (!data.startsWith(TRANSFER_METHOD_ID)) return;
+
+    const contractAddress = this.hexToBase58(value.contract_address);
+    const tokenInfo = this.supportedTokens.get(contractAddress);
+    if (!tokenInfo) return;
+
+    // Parse transfer data: 4 bytes method + 32 bytes address + 32 bytes amount
+    const toAddressHex = '41' + data.substring(8 + 24, 8 + 64);
+    const toAddress = this.hexToBase58(toAddressHex);
+
+    if (!this.walletAddresses.has(toAddress)) return;
+
+    const amountHex = data.substring(8 + 64, 8 + 128);
+    const amount = BigInt('0x' + amountHex).toString();
+
+    const fromAddress = this.hexToBase58(value.owner_address);
+
+    await this.createDepositTransaction({
+      txHash,
+      fromAddress,
+      toAddress,
+      amount,
+      tokenSymbol: tokenInfo.symbol,
+      tokenAddress: contractAddress,
+    });
+  }
+
+  private async createDepositTransaction(params: {
+    txHash: string;
+    fromAddress: string;
+    toAddress: string;
+    amount: string;
+    tokenSymbol: string;
+    tokenAddress: string | null;
+  }) {
+    // Find wallet owner
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { address: params.toAddress },
+    });
+    if (!wallet) return;
+
+    try {
+      await this.prisma.transaction.create({
+        data: {
+          txHash: params.txHash,
+          type: TxType.DEPOSIT,
+          status: TxStatus.CONFIRMED,
+          toUserId: wallet.userId,
+          fromAddress: params.fromAddress,
+          toAddress: params.toAddress,
+          amount: params.amount,
+          tokenSymbol: params.tokenSymbol,
+          tokenAddress: params.tokenAddress,
+        },
+      });
+
+      await this.notificationService.create(
+        wallet.userId,
+        'DEPOSIT',
+        'Deposit Received',
+        `You received ${params.amount} ${params.tokenSymbol} from ${params.fromAddress}`,
+        { txHash: params.txHash },
+      );
+
+      this.logger.log(
+        `Deposit detected: ${params.amount} ${params.tokenSymbol} → ${params.toAddress} (TX: ${params.txHash})`,
+      );
+    } catch (err: any) {
+      // Skip duplicate txHash (unique constraint)
+      if (err?.code === 'P2002') {
+        this.logger.debug(`Duplicate deposit TX skipped: ${params.txHash}`);
+        return;
+      }
+      this.logger.error(`Failed to create deposit record: ${err}`);
+    }
+  }
+
+  private hexToBase58(hexAddress: string): string {
+    try {
+      return TronWeb.address.fromHex(hexAddress);
+    } catch {
+      return hexAddress;
+    }
   }
 
   private async saveLastProcessedBlock(blockNumber: number) {

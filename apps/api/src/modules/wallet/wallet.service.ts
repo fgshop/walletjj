@@ -99,15 +99,30 @@ export class WalletService {
 
     const cacheKey = `balance:${wallet.address}`;
     const cached = await this.redis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached);
+    const balances = cached
+      ? JSON.parse(cached)
+      : await this.fetchBalancesFromNetwork(wallet.address);
+
+    if (!cached) {
+      await this.redis.set(cacheKey, JSON.stringify(balances), 30);
     }
 
-    const balances = await this.fetchBalancesFromNetwork(wallet.address);
+    // Sum pending withdrawal amounts (funds locked but not yet completed/rejected/refunded)
+    const pendingWithdrawals = await this.prisma.withdrawalRequest.findMany({
+      where: {
+        userId,
+        status: { in: ['PENDING_24H', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING'] },
+      },
+      select: { amount: true, tokenSymbol: true },
+    });
 
-    await this.redis.set(cacheKey, JSON.stringify(balances), 30);
+    const pendingBySymbol: Record<string, number> = {};
+    for (const w of pendingWithdrawals) {
+      const sym = w.tokenSymbol;
+      pendingBySymbol[sym] = (pendingBySymbol[sym] ?? 0) + Number(w.amount);
+    }
 
-    return balances;
+    return { ...balances, pendingBySymbol };
   }
 
   async ensureWallet(userId: string): Promise<void> {
@@ -121,7 +136,8 @@ export class WalletService {
 
   private async fetchBalancesFromNetwork(address: string) {
     try {
-      const trxBalance = await this.tronService.getBalance(address);
+      const trxBalanceSun = await this.tronService.getBalance(address);
+      const trxBalance = (Number(trxBalanceSun) / 1_000_000).toString();
 
       const balances: Array<{
         symbol: string;
@@ -130,7 +146,7 @@ export class WalletService {
         decimals: number;
       }> = [
         {
-          symbol: 'TRX',
+          symbol: 'JOJU',
           balance: trxBalance,
           decimals: 6,
         },
@@ -165,7 +181,7 @@ export class WalletService {
       this.logger.error(`Failed to fetch balances for ${address}: ${err}`);
       return {
         address,
-        balances: [{ symbol: 'TRX', balance: '0', decimals: 6 }],
+        balances: [{ symbol: 'JOJU', balance: '0', decimals: 6 }],
       };
     }
   }

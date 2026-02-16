@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -25,6 +26,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly walletService: WalletService,
+    private readonly emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -55,13 +57,18 @@ export class AuthService {
       },
     });
 
+    // Create TRON wallet immediately
+    const wallet = await this.walletService.createWalletForUser(user.id);
+
     this.logger.log(`User registered: ${dto.email}, verification code: ${code}`);
+    this.emailService.sendVerificationCode(dto.email, code);
 
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       isEmailVerified: user.isEmailVerified,
+      address: wallet.address,
       createdAt: user.createdAt,
       message: 'Verification code sent to your email',
     };
@@ -146,10 +153,8 @@ export class AuthService {
       data: { lastLoginAt: new Date(), lastLoginIp: ipAddress },
     });
 
-    // Auto-create wallet if not exists
-    this.walletService.ensureWallet(user.id).catch((err) => {
-      this.logger.error(`Failed to create wallet for user ${user.id}: ${err.message}`);
-    });
+    // Ensure wallet exists (for users registered before wallet-on-register)
+    this.walletService.ensureWallet(user.id).catch(() => {});
 
     return {
       accessToken,

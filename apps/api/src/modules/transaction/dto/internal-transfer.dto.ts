@@ -7,17 +7,17 @@ export class InternalTransferDto {
   @IsString()
   recipient: string;
 
-  @ApiProperty({ description: 'Amount in smallest unit (sun for TRX)' })
+  @ApiProperty({ description: 'Amount in smallest unit (sun for JOJU)' })
   @IsNotEmpty()
   @IsString()
   amount: string;
 
-  @ApiProperty({ description: 'Token symbol', default: 'TRX' })
+  @ApiProperty({ description: 'Token symbol', default: 'JOJU' })
   @IsOptional()
   @IsString()
   tokenSymbol?: string;
 
-  @ApiProperty({ description: 'TRC-20 contract address (null for TRX)', required: false })
+  @ApiProperty({ description: 'TRC-20 contract address (null for JOJU)', required: false })
   @IsOptional()
   @IsString()
   tokenAddress?: string;

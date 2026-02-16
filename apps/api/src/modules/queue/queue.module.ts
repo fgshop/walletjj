@@ -1,7 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { WITHDRAWAL_QUEUE, NOTIFICATION_QUEUE } from './queue.constants';
+
+const logger = new Logger('QueueModule');
+let redisErrorLogged = false;
 
 @Module({
   imports: [
@@ -18,6 +21,24 @@ import { WITHDRAWAL_QUEUE, NOTIFICATION_QUEUE } from './queue.constants';
             host: url.hostname,
             port: parseInt(url.port || '6379', 10),
             password: url.password || undefined,
+            maxRetriesPerRequest: null,
+            enableOfflineQueue: false,
+            lazyConnect: true,
+            retryStrategy(times: number) {
+              if (times > 3) {
+                if (!redisErrorLogged) {
+                  logger.warn(
+                    'Redis not available. BullMQ queues disabled. Withdrawal 24h timer and execution jobs will not run.',
+                  );
+                  redisErrorLogged = true;
+                }
+                return null;
+              }
+              return Math.min(times * 500, 3000);
+            },
+            reconnectOnError() {
+              return false;
+            },
           },
         };
       },

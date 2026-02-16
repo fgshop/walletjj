@@ -3,13 +3,21 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WITHDRAWAL_QUEUE } from '../queue/queue.constants';
-import { WithdrawalStatus } from '@prisma/client';
+import { WithdrawalStatus, TxType, TxStatus } from '@prisma/client';
+import { CryptoService } from '../wallet/crypto/crypto.service';
+import { TronService } from '../wallet/tron/tron.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Processor(WITHDRAWAL_QUEUE)
 export class WithdrawalProcessor extends WorkerHost {
   private readonly logger = new Logger(WithdrawalProcessor.name);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cryptoService: CryptoService,
+    private readonly tronService: TronService,
+    private readonly notificationService: NotificationService,
+  ) {
     super();
   }
 
@@ -18,6 +26,8 @@ export class WithdrawalProcessor extends WorkerHost {
 
     if (job.name === 'process-24h') {
       await this.handle24hTransition(withdrawalId);
+    } else if (job.name === 'execute-withdrawal') {
+      await this.executeWithdrawal(withdrawalId);
     }
   }
 
@@ -46,5 +56,122 @@ export class WithdrawalProcessor extends WorkerHost {
     this.logger.log(
       `Withdrawal ${withdrawalId} transitioned to PENDING_APPROVAL`,
     );
+  }
+
+  private async executeWithdrawal(withdrawalId: string) {
+    const withdrawal = await this.prisma.withdrawalRequest.findUnique({
+      where: { id: withdrawalId },
+      include: { user: { include: { wallet: true } } },
+    });
+
+    if (!withdrawal) {
+      this.logger.warn(`Withdrawal ${withdrawalId} not found for execution`);
+      return;
+    }
+
+    if (withdrawal.status !== WithdrawalStatus.APPROVED) {
+      this.logger.log(
+        `Withdrawal ${withdrawalId} is not APPROVED (current: ${withdrawal.status}), skipping execution`,
+      );
+      return;
+    }
+
+    const wallet = withdrawal.user.wallet;
+    if (!wallet) {
+      this.logger.error(`User ${withdrawal.userId} has no wallet`);
+      await this.prisma.withdrawalRequest.update({
+        where: { id: withdrawalId },
+        data: {
+          status: WithdrawalStatus.FAILED,
+          failReason: 'User wallet not found',
+        },
+      });
+      return;
+    }
+
+    // Transition to PROCESSING
+    await this.prisma.withdrawalRequest.update({
+      where: { id: withdrawalId },
+      data: { status: WithdrawalStatus.PROCESSING },
+    });
+
+    try {
+      const privateKey = this.cryptoService.decrypt(wallet.encryptedKey);
+
+      let txHash: string;
+      if (withdrawal.tokenAddress) {
+        txHash = await this.tronService.sendTrc20(
+          privateKey,
+          withdrawal.toAddress,
+          withdrawal.tokenAddress,
+          withdrawal.amount,
+        );
+      } else {
+        txHash = await this.tronService.sendTrx(
+          privateKey,
+          withdrawal.toAddress,
+          Number(withdrawal.amount),
+        );
+      }
+
+      // Create transaction record and link to withdrawal
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          txHash,
+          type: TxType.EXTERNAL_SEND,
+          status: TxStatus.CONFIRMED,
+          fromUserId: withdrawal.userId,
+          fromAddress: wallet.address,
+          toAddress: withdrawal.toAddress,
+          amount: withdrawal.amount,
+          tokenSymbol: withdrawal.tokenSymbol,
+          tokenAddress: withdrawal.tokenAddress,
+        },
+      });
+
+      await this.prisma.withdrawalRequest.update({
+        where: { id: withdrawalId },
+        data: {
+          status: WithdrawalStatus.COMPLETED,
+          completedAt: new Date(),
+          transactionId: transaction.id,
+        },
+      });
+
+      await this.notificationService.create(
+        withdrawal.userId,
+        'WITHDRAWAL_COMPLETE',
+        'Withdrawal Complete',
+        `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} to ${withdrawal.toAddress} has been completed. TX: ${txHash}`,
+        { withdrawalId, txHash },
+      );
+
+      this.logger.log(
+        `Withdrawal ${withdrawalId} completed successfully. TX: ${txHash}`,
+      );
+    } catch (err) {
+      const failReason =
+        err instanceof Error ? err.message : 'Unknown execution error';
+
+      await this.prisma.withdrawalRequest.update({
+        where: { id: withdrawalId },
+        data: {
+          status: WithdrawalStatus.FAILED,
+          failReason,
+        },
+      });
+
+      await this.notificationService.create(
+        withdrawal.userId,
+        'SYSTEM',
+        'Withdrawal Failed',
+        `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} has failed. Please contact support.`,
+        { withdrawalId, error: failReason },
+      );
+
+      this.logger.error(
+        `Withdrawal ${withdrawalId} execution failed: ${failReason}`,
+      );
+    }
   }
 }

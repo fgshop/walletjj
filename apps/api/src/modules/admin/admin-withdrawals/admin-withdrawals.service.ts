@@ -3,11 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationService } from '../../notification/notification.service';
 import { ReviewAction } from '../dto/review-withdrawal.dto';
 import { WithdrawalStatus, Prisma } from '@prisma/client';
+import { WITHDRAWAL_QUEUE } from '../../queue/queue.constants';
 
 @Injectable()
 export class AdminWithdrawalsService {
@@ -15,6 +18,7 @@ export class AdminWithdrawalsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationService: NotificationService,
+    @InjectQueue(WITHDRAWAL_QUEUE) private readonly withdrawalQueue: Queue,
   ) {}
 
   async listWithdrawals(query: {
@@ -100,6 +104,12 @@ export class AdminWithdrawalsService {
         'Withdrawal Approved',
         `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} has been approved and is being processed.`,
         { withdrawalId },
+      );
+
+      await this.withdrawalQueue.add(
+        'execute-withdrawal',
+        { withdrawalId },
+        { jobId: `exec-wd-${withdrawalId}` },
       );
     } else {
       await this.prisma.withdrawalRequest.update({
