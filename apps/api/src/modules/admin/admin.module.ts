@@ -29,6 +29,7 @@ import { AdminTokensService } from './admin-tokens/admin-tokens.service';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationModule } from '../notification/notification.module';
 import { QueueModule } from '../queue/queue.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { QueueModule } from '../queue/queue.module';
     AuditModule,
     NotificationModule,
     QueueModule,
+    WalletModule,
   ],
   controllers: [
     AdminAuthController,

@@ -23,7 +23,7 @@ export class WalletController {
   }
 
   @Get('balance')
-  @ApiOperation({ summary: 'Get wallet balance (JOJU + TRC-20)' })
+  @ApiOperation({ summary: 'Get wallet balance (DB-computed)' })
   @ApiResponse({ status: 200, type: WalletBalanceResponseDto })
   async getBalance(@CurrentUser('id') userId: string) {
     return this.walletService.getBalance(userId);

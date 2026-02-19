@@ -15,12 +15,11 @@ export default function SendPage() {
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [onchainBalance, setOnchainBalance] = useState<number>(0);
+  const [balance, setBalance] = useState<number>(0);
   const [pendingAmount, setPendingAmount] = useState<number>(0);
-  const [internalNet, setInternalNet] = useState<number>(0);
   const [balanceLoading, setBalanceLoading] = useState(true);
 
-  const effectiveBalance = Math.max(0, onchainBalance + internalNet - pendingAmount);
+  const sendableBalance = Math.max(0, balance - pendingAmount);
 
   useEffect(() => {
     async function fetchBalance() {
@@ -29,13 +28,11 @@ export default function SendPage() {
         const balData = data.data ?? {};
         const balances = balData.balances ?? [];
         const pending = balData.pendingBySymbol ?? {};
-        const internalNetMap = balData.internalNetBySymbol ?? {};
         const joju = balances.find((b: { symbol: string }) => b.symbol === 'JOJU');
-        setOnchainBalance(Number(joju?.balance ?? 0));
+        setBalance(Number(joju?.balance ?? 0));
         setPendingAmount(pending['JOJU'] ?? 0);
-        setInternalNet(internalNetMap['JOJU'] ?? 0);
       } catch {
-        setOnchainBalance(0);
+        setBalance(0);
       } finally {
         setBalanceLoading(false);
       }
@@ -49,7 +46,7 @@ export default function SendPage() {
   }, []);
 
   const setPercentage = (pct: number) => {
-    const val = effectiveBalance * (pct / 100);
+    const val = sendableBalance * (pct / 100);
     setAmount(val > 0 ? val.toString() : '');
   };
 
@@ -66,8 +63,8 @@ export default function SendPage() {
       setError('올바른 금액을 입력해주세요.');
       return;
     }
-    if (Number(amount) > effectiveBalance) {
-      setError('유효 잔액이 부족합니다.');
+    if (Number(amount) > sendableBalance) {
+      setError(`송금 가능 잔액이 부족합니다. (가용: ${sendableBalance} JOJU)`);
       return;
     }
     setShowConfirm(true);
@@ -99,7 +96,20 @@ export default function SendPage() {
   return (
     <div className="mx-auto max-w-lg pb-20 sm:pb-0">
       <h1 className="text-xl font-bold text-white">송금</h1>
-      <p className="mb-6 text-sm text-gray-400">다른 회원에게 JOJU를 보내세요</p>
+      <p className="mb-4 text-sm text-gray-400">다른 회원에게 JOJU를 보내세요</p>
+
+      {/* Internal transfer info */}
+      <div className="mb-4 rounded-xl border border-purple-500/20 bg-purple-500/10 p-4">
+        <div className="flex items-start gap-2">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+          <div className="text-xs text-purple-300/80">
+            <p className="font-medium text-purple-200">내부 송금 안내</p>
+            <p className="mt-1">회원간 송금은 블록체인 없이 즉시 처리됩니다. 수수료가 없습니다.</p>
+          </div>
+        </div>
+      </div>
 
       <div className="glass-card-strong p-6">
         {error && (
@@ -140,21 +150,26 @@ export default function SendPage() {
                   <span className="inline-block h-3 w-16 rounded shimmer align-middle" />
                 ) : (
                   <span>
-                    유효 잔액: <span className="font-semibold text-purple-400">{effectiveBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                    송금 가능: <span className="font-semibold text-purple-400">{sendableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                     <span className="text-gray-500"> JOJU</span>
                   </span>
                 )}
               </span>
             </div>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="input-dark w-full rounded-xl px-4 py-3 text-sm"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="input-dark w-full rounded-xl py-3 pl-4 pr-16 text-right text-sm"
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
+                JOJU
+              </span>
+            </div>
             <div className="mt-2 flex gap-2">
               {[10, 15, 25, 50].map((pct) => (
                 <button
@@ -175,6 +190,24 @@ export default function SendPage() {
               </button>
             </div>
           </div>
+          {/* Balance breakdown */}
+          {!balanceLoading && pendingAmount > 0 && (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-[11px] text-gray-400">
+              <div className="flex justify-between">
+                <span>총 잔액</span>
+                <span className="font-mono text-gray-300">{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+              </div>
+              <div className="mt-1 flex justify-between">
+                <span>출금 대기</span>
+                <span className="font-mono text-amber-400">-{pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+              </div>
+              <div className="mt-1.5 flex justify-between border-t border-white/[0.06] pt-1.5 font-medium text-gray-300">
+                <span>송금 가능</span>
+                <span className="font-mono text-purple-400">{sendableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-300">메모 (선택)</label>
             <input

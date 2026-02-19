@@ -13,11 +13,19 @@ export class TronService {
     );
     const apiKey = this.configService.get<string>('TRON_API_KEY', '');
 
+    // A default address is required for read-only contract .call() methods (e.g. balanceOf).
+    // This is a well-known Shasta testnet address used only as a caller identity for view functions.
+    const defaultAddress = this.configService.get<string>(
+      'TRON_DEFAULT_ADDRESS',
+      'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb',
+    );
+
     const { TronWeb } = require('tronweb');
     this.tronWeb = new TronWeb({
       fullHost,
       headers: apiKey ? { 'TRON-PRO-API-KEY': apiKey } : {},
     });
+    this.tronWeb.setAddress(defaultAddress);
   }
 
   async getBalance(address: string): Promise<string> {

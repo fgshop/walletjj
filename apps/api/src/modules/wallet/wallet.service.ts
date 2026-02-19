@@ -88,6 +88,58 @@ export class WalletService {
     return wallet;
   }
 
+  /**
+   * Compute user's DB balance for a given token symbol.
+   * Formula: SUM(deposits received) + SUM(internal received) - SUM(internal sent) - SUM(completed withdrawals)
+   * SWEEP transactions are excluded (they don't affect user balance).
+   */
+  async getComputedBalance(userId: string, tokenSymbol: string): Promise<number> {
+    // Incoming: DEPOSIT + INTERNAL received
+    const incoming = await this.prisma.transaction.findMany({
+      where: {
+        toUserId: userId,
+        tokenSymbol,
+        status: TxStatus.CONFIRMED,
+        type: { in: [TxType.DEPOSIT, TxType.INTERNAL] },
+      },
+      select: { amount: true },
+    });
+    const totalIn = incoming.reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+    // Outgoing: INTERNAL sent + EXTERNAL_SEND (completed withdrawals)
+    const outgoing = await this.prisma.transaction.findMany({
+      where: {
+        fromUserId: userId,
+        tokenSymbol,
+        status: TxStatus.CONFIRMED,
+        type: { in: [TxType.INTERNAL, TxType.EXTERNAL_SEND] },
+      },
+      select: { amount: true },
+    });
+    const totalOut = outgoing.reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+    return totalIn - totalOut;
+  }
+
+  /**
+   * Available balance = DB balance - pending withdrawals (not yet completed/rejected/refunded)
+   */
+  async getAvailableBalance(userId: string, tokenSymbol: string): Promise<number> {
+    const computed = await this.getComputedBalance(userId, tokenSymbol);
+
+    const pendingWithdrawals = await this.prisma.withdrawalRequest.findMany({
+      where: {
+        userId,
+        tokenSymbol,
+        status: { in: ['PENDING_24H', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING'] },
+      },
+      select: { amount: true },
+    });
+    const pendingSum = pendingWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+
+    return computed - pendingSum;
+  }
+
   async getBalance(userId: string) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -98,17 +150,35 @@ export class WalletService {
       throw new NotFoundException('Wallet not found');
     }
 
-    const cacheKey = `balance:${wallet.address}`;
-    const cached = await this.redis.get(cacheKey);
-    const balances = cached
-      ? JSON.parse(cached)
-      : await this.fetchBalancesFromNetwork(wallet.address);
+    // Get all supported tokens
+    const tokens = await this.prisma.supportedToken.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
 
-    if (!cached) {
-      await this.redis.set(cacheKey, JSON.stringify(balances), 30);
+    // Build balance list from DB computation
+    const symbols = ['JOJU', ...tokens.map((t) => t.symbol)];
+    const uniqueSymbols = [...new Set(symbols)];
+
+    const balances: Array<{
+      symbol: string;
+      contractAddress?: string;
+      balance: string;
+      decimals: number;
+    }> = [];
+
+    for (const symbol of uniqueSymbols) {
+      const computed = await this.getComputedBalance(userId, symbol);
+      const token = tokens.find((t) => t.symbol === symbol);
+      balances.push({
+        symbol,
+        contractAddress: token?.contractAddress,
+        balance: computed.toString(),
+        decimals: token?.decimals ?? 6,
+      });
     }
 
-    // Sum pending withdrawal amounts (funds locked but not yet completed/rejected/refunded)
+    // Pending withdrawals by symbol
     const pendingWithdrawals = await this.prisma.withdrawalRequest.findMany({
       where: {
         userId,
@@ -123,35 +193,12 @@ export class WalletService {
       pendingBySymbol[sym] = (pendingBySymbol[sym] ?? 0) + Number(w.amount);
     }
 
-    // Net internal transfer amounts (received - sent) per symbol
-    const internalNetBySymbol = await this.getInternalNetBySymbol(userId);
-
-    return { ...balances, pendingBySymbol, internalNetBySymbol };
-  }
-
-  async getInternalNetBySymbol(userId: string): Promise<Record<string, number>> {
-    const internalTxs = await this.prisma.transaction.findMany({
-      where: {
-        type: TxType.INTERNAL,
-        status: TxStatus.CONFIRMED,
-        OR: [{ fromUserId: userId }, { toUserId: userId }],
-      },
-      select: { fromUserId: true, toUserId: true, amount: true, tokenSymbol: true },
-    });
-
-    const net: Record<string, number> = {};
-    for (const tx of internalTxs) {
-      const sym = tx.tokenSymbol;
-      const amt = Number(tx.amount);
-      if (tx.toUserId === userId) {
-        net[sym] = (net[sym] ?? 0) + amt;
-      }
-      if (tx.fromUserId === userId) {
-        net[sym] = (net[sym] ?? 0) - amt;
-      }
-    }
-
-    return net;
+    return {
+      address: wallet.address,
+      balances,
+      pendingBySymbol,
+      fetchedAt: new Date().toISOString(),
+    };
   }
 
   async ensureWallet(userId: string): Promise<void> {
@@ -160,58 +207,6 @@ export class WalletService {
     });
     if (!existing) {
       await this.createWalletForUser(userId);
-    }
-  }
-
-  private async fetchBalancesFromNetwork(address: string) {
-    try {
-      const trxBalanceSun = await this.tronService.getBalance(address);
-      const trxBalance = (Number(trxBalanceSun) / 1_000_000).toString();
-
-      const balances: Array<{
-        symbol: string;
-        contractAddress?: string;
-        balance: string;
-        decimals: number;
-      }> = [
-        {
-          symbol: 'JOJU',
-          balance: trxBalance,
-          decimals: 6,
-        },
-      ];
-
-      const tokens = await this.prisma.supportedToken.findMany({
-        where: { isActive: true },
-        orderBy: { sortOrder: 'asc' },
-      });
-
-      for (const token of tokens) {
-        try {
-          const balance = await this.tronService.getTrc20Balance(
-            address,
-            token.contractAddress,
-          );
-          balances.push({
-            symbol: token.symbol,
-            contractAddress: token.contractAddress,
-            balance,
-            decimals: token.decimals,
-          });
-        } catch (err) {
-          this.logger.warn(
-            `Failed to fetch ${token.symbol} balance for ${address}: ${err}`,
-          );
-        }
-      }
-
-      return { address, balances };
-    } catch (err) {
-      this.logger.error(`Failed to fetch balances for ${address}: ${err}`);
-      return {
-        address,
-        balances: [{ symbol: 'JOJU', balance: '0', decimals: 6 }],
-      };
     }
   }
 

@@ -25,6 +25,34 @@ export class AdminWalletsController {
     return this.adminWalletsService.listWallets(query);
   }
 
+  @Get(':id/balance')
+  @AdminRoles('OPERATOR' as any)
+  @ApiOperation({ summary: 'Get wallet on-chain balance' })
+  async getWalletBalance(@Param('id') walletId: string) {
+    return this.adminWalletsService.getWalletBalance(walletId);
+  }
+
+  @Post('migrate-balances')
+  @AdminRoles('SUPER_ADMIN' as any)
+  @ApiOperation({ summary: 'Migrate all on-chain balances to DB and sweep to hot wallet' })
+  async migrateBalances(
+    @CurrentAdmin('id') adminId: string,
+    @Req() req: Request,
+  ) {
+    return this.adminWalletsService.migrateAllBalances(adminId, req.ip || '');
+  }
+
+  @Post(':id/sweep')
+  @AdminRoles('ADMIN' as any)
+  @ApiOperation({ summary: 'Sweep a single wallet to hot wallet' })
+  async sweepWallet(
+    @CurrentAdmin('id') adminId: string,
+    @Param('id') walletId: string,
+    @Req() req: Request,
+  ) {
+    return this.adminWalletsService.sweepWallet(adminId, walletId, req.ip || '');
+  }
+
   @Post(':id/lock')
   @AdminRoles('ADMIN' as any)
   @ApiOperation({ summary: 'Lock a wallet' })

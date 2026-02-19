@@ -280,6 +280,7 @@ enum TxType {
   EXTERNAL_SEND
   EXTERNAL_RECEIVE
   DEPOSIT
+  SWEEP
 }
 
 enum TxStatus {

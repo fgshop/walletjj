@@ -10,6 +10,7 @@ export enum TxType {
   EXTERNAL_SEND = 'EXTERNAL_SEND',
   EXTERNAL_RECEIVE = 'EXTERNAL_RECEIVE',
   DEPOSIT = 'DEPOSIT',
+  SWEEP = 'SWEEP',
 }
 
 export enum TxStatus {

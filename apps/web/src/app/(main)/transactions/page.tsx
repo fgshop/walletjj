@@ -54,11 +54,11 @@ export default function TransactionsPage() {
     fetchTransactions(next, filter, true);
   };
 
-  const filters: { value: FilterType; label: string }[] = [
+  const filters: { value: FilterType; label: string; tag?: string; tagClass?: string }[] = [
     { value: 'ALL', label: '전체' },
-    { value: 'INTERNAL', label: '내부송금' },
-    { value: 'WITHDRAWAL', label: '출금' },
-    { value: 'DEPOSIT', label: '입금' },
+    { value: 'INTERNAL', label: '내부송금', tag: '내부', tagClass: 'text-purple-400' },
+    { value: 'WITHDRAWAL', label: '출금', tag: '온체인', tagClass: 'text-cyan-400' },
+    { value: 'DEPOSIT', label: '입금', tag: '온체인', tagClass: 'text-cyan-400' },
   ];
 
   return (
@@ -79,6 +79,7 @@ export default function TransactionsPage() {
             }`}
           >
             {f.label}
+            {f.tag && <span className={`ml-1 text-[9px] font-semibold ${filter === f.value ? 'text-white/60' : (f.tagClass || '')}`}>({f.tag})</span>}
           </button>
         ))}
       </div>

@@ -28,11 +28,12 @@ interface TransactionListProps {
   currentUserId?: string;
 }
 
-const typeLabels: Record<TxType, string> = {
-  [TxType.INTERNAL]: '내부 송금',
-  [TxType.EXTERNAL_SEND]: '외부 출금',
-  [TxType.EXTERNAL_RECEIVE]: '외부 입금',
-  [TxType.DEPOSIT]: '입금',
+const typeConfig: Record<string, { label: string; source: string; sourceClass: string }> = {
+  [TxType.INTERNAL]: { label: '내부 송금', source: '내부', sourceClass: 'bg-purple-500/15 text-purple-400 border-purple-500/20' },
+  [TxType.EXTERNAL_SEND]: { label: '외부 출금', source: '온체인', sourceClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+  [TxType.EXTERNAL_RECEIVE]: { label: '외부 입금', source: '온체인', sourceClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+  [TxType.DEPOSIT]: { label: '입금', source: '온체인', sourceClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+  [TxType.SWEEP]: { label: 'Sweep', source: '시스템', sourceClass: 'bg-gray-500/15 text-gray-400 border-gray-500/20' },
 };
 
 const statusConfig: Record<TxStatus, { label: string; className: string }> = {
@@ -139,16 +140,20 @@ export default function TransactionList({ transactions, loading, currentUserId }
           ? withdrawalStatusConfig[tx.withdrawalStatus]
           : statusConfig[tx.status];
 
+        const config = typeConfig[tx.type] ?? typeConfig[TxType.INTERNAL];
         const typeLabel = tx.type === TxType.INTERNAL
           ? (isOutgoing ? '내부 송금' : '내부 수신')
-          : typeLabels[tx.type];
+          : config.label;
 
         return (
           <div key={tx.id} className="flex items-center gap-3 rounded-xl bg-white/[0.02] p-4 transition-all duration-300 hover:bg-white/[0.05]">
             {typeIcon(isOutgoing)}
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className="text-sm font-medium text-white">{typeLabel}</span>
+                <span className={`rounded-full border px-1.5 py-px text-[9px] font-semibold ${config.sourceClass}`}>
+                  {config.source}
+                </span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
                   {badge.label}
                 </span>

@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 
-interface BalanceInfo {
-  joju: string;
-  usdt: string;
+interface BalanceEntry {
+  symbol: string;
+  balance: string;
+  decimals: number;
+}
+
+interface BalanceData {
   address: string;
-  pendingJoju: number;
-  pendingUsdt: number;
-  internalNetJoju: number;
-  internalNetUsdt: number;
+  balances: BalanceEntry[];
+  pendingBySymbol: Record<string, number>;
+  fetchedAt: string;
 }
 
 function fmt(n: number): string {
@@ -18,45 +21,44 @@ function fmt(n: number): string {
 }
 
 export default function BalanceCard() {
-  const [balance, setBalance] = useState<BalanceInfo | null>(null);
+  const [address, setAddress] = useState('');
+  const [balances, setBalances] = useState<BalanceEntry[]>([]);
+  const [pending, setPending] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddress, setShowAddress] = useState(false);
-  const [showDetail, setShowDetail] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    async function fetchBalance() {
-      try {
-        const [walletRes, balanceRes] = await Promise.all([
-          api.get('/wallet'),
-          api.get('/wallet/balance'),
-        ]);
-        const balData = balanceRes.data.data ?? {};
-        const balances = balData.balances ?? [];
-        const pending = balData.pendingBySymbol ?? {};
-        const internalNet = balData.internalNetBySymbol ?? {};
-        const jojuBal = balances.find((b: { symbol: string }) => b.symbol === 'JOJU');
-        const usdtBal = balances.find((b: { symbol: string }) => b.symbol === 'USDT');
-        setBalance({
-          joju: jojuBal?.balance ?? '0',
-          usdt: usdtBal?.balance ?? '0',
-          address: walletRes.data.data?.address ?? '',
-          pendingJoju: pending['JOJU'] ?? 0,
-          pendingUsdt: pending['USDT'] ?? 0,
-          internalNetJoju: internalNet['JOJU'] ?? 0,
-          internalNetUsdt: internalNet['USDT'] ?? 0,
-        });
-      } catch {
-        setBalance({ joju: '0', usdt: '0', address: '', pendingJoju: 0, pendingUsdt: 0, internalNetJoju: 0, internalNetUsdt: 0 });
-      } finally {
-        setLoading(false);
-      }
+  const fetchBalance = useCallback(async () => {
+    try {
+      const [walletRes, balanceRes] = await Promise.all([
+        api.get('/wallet'),
+        api.get('/wallet/balance'),
+      ]);
+      const data: BalanceData = balanceRes.data.data ?? balanceRes.data ?? {};
+      setAddress(walletRes.data.data?.address ?? '');
+      setBalances(data.balances ?? []);
+      setPending(data.pendingBySymbol ?? {});
+    } catch {
+      setBalances([]);
     }
-    fetchBalance();
   }, []);
 
+  useEffect(() => {
+    fetchBalance().finally(() => setLoading(false));
+  }, [fetchBalance]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchBalance();
+    setRefreshing(false);
+  };
+
   const copyAddress = () => {
-    if (balance?.address) {
-      navigator.clipboard.writeText(balance.address);
+    if (address) {
+      navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     }
   };
 
@@ -64,107 +66,108 @@ export default function BalanceCard() {
     return (
       <div className="balance-gradient rounded-2xl p-6 glow-purple">
         <div className="relative z-10">
-          <div className="h-6 w-24 rounded shimmer" />
-          <div className="mt-4 h-10 w-40 rounded shimmer" />
-          <div className="mt-3 h-5 w-32 rounded shimmer" />
+          <div className="h-5 w-20 rounded shimmer" />
+          <div className="mt-4 h-24 rounded-xl shimmer" />
         </div>
       </div>
     );
   }
 
-  const onchainJoju = Number(balance?.joju ?? 0);
-  const onchainUsdt = Number(balance?.usdt ?? 0);
-  const effectiveJoju = onchainJoju + (balance?.internalNetJoju ?? 0) - (balance?.pendingJoju ?? 0);
-  const effectiveUsdt = onchainUsdt + (balance?.internalNetUsdt ?? 0) - (balance?.pendingUsdt ?? 0);
+  const getBal = (symbol: string) => {
+    const entry = balances.find((b) => b.symbol === symbol);
+    return Number(entry?.balance ?? 0);
+  };
+
+  const joju = getBal('JOJU');
+  const usdt = getBal('USDT');
+  const pendingJoju = pending['JOJU'] ?? 0;
+  const pendingUsdt = pending['USDT'] ?? 0;
+
+  const availableJoju = Math.max(0, joju - pendingJoju);
+  const availableUsdt = Math.max(0, usdt - pendingUsdt);
 
   return (
-    <div className="balance-gradient rounded-2xl p-6 text-white shadow-xl shadow-purple-500/10 glow-purple">
+    <div className="balance-gradient rounded-2xl p-5 text-white shadow-xl shadow-purple-500/10 glow-purple sm:p-6">
       <div className="relative z-10">
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-white/70">유효 잔액</p>
+          <p className="text-sm font-semibold text-white/80">내 자산</p>
           <button
-            onClick={() => setShowDetail(!showDetail)}
-            className="flex h-8 items-center gap-1 rounded-full bg-white/10 px-3 text-xs font-medium text-white/70 backdrop-blur-sm transition-all duration-300 hover:bg-white/15 hover:text-white/90"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="잔액 새로고침"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white disabled:opacity-50"
           >
-            상세
-            <svg className={`h-3 w-3 transition-transform duration-300 ${showDetail ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            <svg
+              className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
         </div>
 
-        <div className="mt-4 space-y-1">
+        {/* Unified balance card */}
+        <div className="mt-4 rounded-xl bg-white/[0.07] p-4 backdrop-blur-sm">
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight">{fmt(Math.max(0, effectiveJoju))}</span>
-            <span className="text-sm font-medium text-white/70">JOJU</span>
+            <span className="text-3xl font-bold tabular-nums tracking-tight">{fmt(joju)}</span>
+            <span className="text-sm font-medium text-white/50">JOJU</span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-xl font-semibold text-white/90">{fmt(Math.max(0, effectiveUsdt))}</span>
-            <span className="text-xs font-medium text-white/60">USDT</span>
+          {usdt > 0 && (
+            <div className="mt-2 border-t border-white/10 pt-2">
+              <span className="text-lg font-semibold tabular-nums text-white/80">{fmt(usdt)}</span>
+              <span className="ml-1.5 text-xs text-white/40">USDT</span>
+            </div>
+          )}
+          <div className="mt-2 flex items-center gap-1.5">
+            <span className="rounded bg-purple-400/15 px-2 py-0.5 text-[10px] font-semibold text-purple-300">
+              송금 + 출금 가능
+            </span>
           </div>
         </div>
 
-        {showDetail && (
-          <div className="mt-4 space-y-3 rounded-xl bg-black/20 p-4 text-xs backdrop-blur-sm">
-            {/* JOJU breakdown */}
-            <div className="space-y-1.5">
-              <p className="font-semibold text-white/80">JOJU 상세</p>
-              <div className="flex justify-between text-white/60">
-                <span>온체인 잔액</span>
-                <span className="font-mono">{fmt(onchainJoju)} JOJU</span>
-              </div>
-              {(balance?.internalNetJoju ?? 0) !== 0 && (
-                <div className="flex justify-between text-white/60">
-                  <span>내부 수신</span>
-                  <span className={`font-mono ${(balance?.internalNetJoju ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {(balance?.internalNetJoju ?? 0) >= 0 ? '+' : ''}{fmt(balance?.internalNetJoju ?? 0)} JOJU
-                  </span>
-                </div>
+        {/* Pending withdrawal notice */}
+        {(pendingJoju > 0 || pendingUsdt > 0) && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2">
+            <svg className="h-3.5 w-3.5 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-medium text-amber-300">
+              {pendingJoju > 0 && (
+                <span>출금 대기: -{fmt(pendingJoju)} JOJU (가용: {fmt(availableJoju)})</span>
               )}
-              {(balance?.pendingJoju ?? 0) > 0 && (
-                <div className="flex justify-between text-white/60">
-                  <span>출금 대기</span>
-                  <span className="font-mono text-amber-400">-{fmt(balance?.pendingJoju ?? 0)} JOJU</span>
-                </div>
-              )}
-            </div>
-            {/* USDT breakdown */}
-            <div className="space-y-1.5 border-t border-white/10 pt-3">
-              <p className="font-semibold text-white/80">USDT 상세</p>
-              <div className="flex justify-between text-white/60">
-                <span>온체인 잔액</span>
-                <span className="font-mono">{fmt(onchainUsdt)} USDT</span>
-              </div>
-              {(balance?.internalNetUsdt ?? 0) !== 0 && (
-                <div className="flex justify-between text-white/60">
-                  <span>내부 수신</span>
-                  <span className={`font-mono ${(balance?.internalNetUsdt ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {(balance?.internalNetUsdt ?? 0) >= 0 ? '+' : ''}{fmt(balance?.internalNetUsdt ?? 0)} USDT
-                  </span>
-                </div>
-              )}
-              {(balance?.pendingUsdt ?? 0) > 0 && (
-                <div className="flex justify-between text-white/60">
-                  <span>출금 대기</span>
-                  <span className="font-mono text-amber-400">-{fmt(balance?.pendingUsdt ?? 0)} USDT</span>
-                </div>
+              {pendingUsdt > 0 && (
+                <span>출금 대기: -{fmt(pendingUsdt)} USDT (가용: {fmt(availableUsdt)})</span>
               )}
             </div>
           </div>
         )}
 
-        {balance?.address && (
-          <div className="mt-4 flex items-center gap-2">
+        {/* Wallet address */}
+        {address && (
+          <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
             <button
               onClick={() => setShowAddress(!showAddress)}
-              className="text-xs font-mono text-white/50 transition-colors duration-300 hover:text-white/80"
+              className="font-mono text-xs text-white/50 transition-colors duration-300 hover:text-white/80"
             >
-              {showAddress ? balance.address : `${balance.address.slice(0, 8)}...${balance.address.slice(-6)}`}
+              {showAddress ? address : `${address.slice(0, 8)}...${address.slice(-6)}`}
             </button>
-            <button onClick={copyAddress} className="text-white/50 transition-colors duration-300 hover:text-white/80">
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
+            <button
+              onClick={copyAddress}
+              title={copied ? '복사됨!' : '주소 복사'}
+              className="text-white/50 transition-colors duration-300 hover:text-white/80"
+            >
+              {copied ? (
+                <svg className="h-3.5 w-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              )}
             </button>
           </div>
         )}

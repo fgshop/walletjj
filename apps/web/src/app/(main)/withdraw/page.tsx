@@ -14,14 +14,11 @@ export default function WithdrawPage() {
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [onchainBalance, setOnchainBalance] = useState<number>(0);
+  const [balance, setBalance] = useState<number>(0);
   const [pendingAmount, setPendingAmount] = useState<number>(0);
-  const [internalNet, setInternalNet] = useState<number>(0);
   const [balanceLoading, setBalanceLoading] = useState(true);
 
-  // Withdrawal uses on-chain available balance only (internal net is NOT withdrawable)
-  const onchainAvailable = Math.max(0, onchainBalance - pendingAmount);
-  const hasInternalBalance = internalNet > 0;
+  const availableBalance = Math.max(0, balance - pendingAmount);
 
   useEffect(() => {
     async function fetchBalance() {
@@ -30,13 +27,11 @@ export default function WithdrawPage() {
         const balData = data.data ?? {};
         const balances = balData.balances ?? [];
         const pending = balData.pendingBySymbol ?? {};
-        const internalNetMap = balData.internalNetBySymbol ?? {};
         const joju = balances.find((b: { symbol: string }) => b.symbol === 'JOJU');
-        setOnchainBalance(Number(joju?.balance ?? 0));
+        setBalance(Number(joju?.balance ?? 0));
         setPendingAmount(pending['JOJU'] ?? 0);
-        setInternalNet(internalNetMap['JOJU'] ?? 0);
       } catch {
-        setOnchainBalance(0);
+        setBalance(0);
       } finally {
         setBalanceLoading(false);
       }
@@ -50,7 +45,7 @@ export default function WithdrawPage() {
   }, []);
 
   const setPercentage = (pct: number) => {
-    const val = onchainAvailable * (pct / 100);
+    const val = availableBalance * (pct / 100);
     setAmount(val > 0 ? val.toString() : '');
   };
 
@@ -71,8 +66,8 @@ export default function WithdrawPage() {
       setError('올바른 금액을 입력해주세요.');
       return;
     }
-    if (Number(amount) > onchainAvailable) {
-      setError(pendingAmount > 0 ? `온체인 출금 가능 금액을 초과했습니다. (출금 대기: ${pendingAmount.toLocaleString()} JOJU)` : '온체인 잔액이 부족합니다.');
+    if (Number(amount) > availableBalance) {
+      setError(pendingAmount > 0 ? `출금 가능 금액을 초과했습니다. (출금 대기: ${pendingAmount.toLocaleString()} JOJU)` : '잔액이 부족합니다.');
       return;
     }
     setShowConfirm(true);
@@ -117,21 +112,6 @@ export default function WithdrawPage() {
         </div>
       </div>
 
-      {/* Internal balance info banner */}
-      {hasInternalBalance && (
-        <div className="mb-4 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
-          <div className="flex items-start gap-2">
-            <svg className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="text-xs text-blue-200">
-              <p className="font-medium">내부 수신 잔액 안내</p>
-              <p className="mt-1 text-blue-300/80">내부 수신 잔액은 외부 출금에 사용할 수 없습니다. 온체인 잔액만 출금 가능합니다.</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="glass-card-strong p-6">
         {error && (
           <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">{error}</div>
@@ -171,21 +151,26 @@ export default function WithdrawPage() {
                   <span className="inline-block h-3 w-16 rounded shimmer align-middle" />
                 ) : (
                   <span>
-                    온체인 가용: <span className="font-semibold text-purple-400">{onchainAvailable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                    출금 가능: <span className="font-semibold text-purple-400">{availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
                     <span className="text-gray-500"> JOJU</span>
                   </span>
                 )}
               </span>
             </div>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="input-dark w-full rounded-xl px-4 py-3 text-sm"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="input-dark w-full rounded-xl py-3 pl-4 pr-16 text-right text-sm"
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
+                JOJU
+              </span>
+            </div>
             <div className="mt-2 flex gap-2">
               {[10, 15, 25, 50].map((pct) => (
                 <button
@@ -206,6 +191,24 @@ export default function WithdrawPage() {
               </button>
             </div>
           </div>
+
+          {/* Balance breakdown */}
+          {!balanceLoading && pendingAmount > 0 && (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-[11px] text-gray-400">
+              <div className="flex justify-between">
+                <span>총 잔액</span>
+                <span className="font-mono text-gray-300">{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+              </div>
+              <div className="mt-1 flex justify-between">
+                <span>출금 대기</span>
+                <span className="font-mono text-amber-400">-{pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+              </div>
+              <div className="mt-1.5 flex justify-between border-t border-white/[0.06] pt-1.5 font-medium text-gray-300">
+                <span>출금 가능</span>
+                <span className="font-mono text-purple-400">{availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"

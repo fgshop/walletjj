@@ -4,6 +4,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TronService } from '../wallet/tron/tron.service';
 import { NotificationService } from '../notification/notification.service';
+import { SweepService } from './sweep.service';
 import { TxType, TxStatus } from '@prisma/client';
 
 const { TronWeb } = require('tronweb');
@@ -33,6 +34,7 @@ export class BlockMonitorService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly tronService: TronService,
     private readonly notificationService: NotificationService,
+    private readonly sweepService: SweepService,
     private readonly configService: ConfigService,
   ) {
     const apiKey = this.configService.get<string>('TRON_API_KEY', '');
@@ -163,13 +165,14 @@ export class BlockMonitorService implements OnModuleInit {
     if (!this.walletAddresses.has(toAddress)) return;
 
     const fromAddress = this.hexToBase58(value.owner_address);
-    const amount = value.amount.toString();
+    // value.amount is in SUN — normalize to TRX (1 TRX = 1,000,000 SUN)
+    const amountTrx = (Number(value.amount) / 1_000_000).toString();
 
     await this.createDepositTransaction({
       txHash,
       fromAddress,
       toAddress,
-      amount,
+      amount: amountTrx,
       tokenSymbol: 'JOJU',
       tokenAddress: null,
     });
@@ -196,7 +199,11 @@ export class BlockMonitorService implements OnModuleInit {
     if (!this.walletAddresses.has(toAddress)) return;
 
     const amountHex = data.substring(8 + 64, 8 + 128);
-    const amount = BigInt('0x' + amountHex).toString();
+    const rawAmount = BigInt('0x' + amountHex);
+    // Normalize raw token units to human-readable (e.g. 100000000 → 100.0 for 6 decimals)
+    const amount = tokenInfo.decimals > 0
+      ? (Number(rawAmount) / Math.pow(10, tokenInfo.decimals)).toString()
+      : rawAmount.toString();
 
     const fromAddress = this.hexToBase58(value.owner_address);
 
@@ -225,7 +232,7 @@ export class BlockMonitorService implements OnModuleInit {
     if (!wallet) return;
 
     try {
-      await this.prisma.transaction.create({
+      const depositTx = await this.prisma.transaction.create({
         data: {
           txHash: params.txHash,
           type: TxType.DEPOSIT,
@@ -250,6 +257,16 @@ export class BlockMonitorService implements OnModuleInit {
       this.logger.log(
         `Deposit detected: ${params.amount} ${params.tokenSymbol} → ${params.toAddress} (TX: ${params.txHash})`,
       );
+
+      // Queue auto-sweep to Hot Wallet
+      await this.sweepService.queueSweep({
+        userId: wallet.userId,
+        walletAddress: params.toAddress,
+        tokenSymbol: params.tokenSymbol,
+        tokenAddress: params.tokenAddress,
+        depositTxId: depositTx.id,
+        amount: params.amount,
+      });
     } catch (err: any) {
       // Skip duplicate txHash (unique constraint)
       if (err?.code === 'P2002') {

@@ -87,17 +87,18 @@ export default function ReceivePage() {
         </div>
 
         {/* Info */}
-        <div className="mt-5 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
+        <div className="mt-5 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
           <div className="flex items-start gap-2">
-            <svg className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
             </svg>
-            <div className="text-xs text-blue-300/80">
-              <p className="font-medium text-blue-300">입금 안내</p>
-              <ul className="mt-1 space-y-0.5">
+            <div className="text-xs text-cyan-300/80">
+              <p className="font-medium text-cyan-300">입금 안내</p>
+              <ul className="mt-1.5 space-y-1">
+                <li>이 주소로 입금하면 <span className="font-semibold text-cyan-200">잔액에 자동 반영</span>됩니다.</li>
+                <li>반영된 잔액은 <span className="font-semibold text-cyan-200">송금 + 출금</span> 모두 사용 가능합니다.</li>
                 <li>TRON(TRC-20) 네트워크만 지원됩니다.</li>
                 <li>다른 네트워크로 전송 시 자산이 유실될 수 있습니다.</li>
-                <li>QR 코드를 상대방에게 보여주면 쉽게 입금받을 수 있습니다.</li>
               </ul>
             </div>
           </div>

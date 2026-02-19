@@ -1,7 +1,7 @@
 import { Module, Logger } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
-import { WITHDRAWAL_QUEUE, NOTIFICATION_QUEUE } from './queue.constants';
+import { WITHDRAWAL_QUEUE, NOTIFICATION_QUEUE, SWEEP_QUEUE } from './queue.constants';
 
 const logger = new Logger('QueueModule');
 let redisErrorLogged = false;
@@ -46,6 +46,7 @@ let redisErrorLogged = false;
     BullModule.registerQueue(
       { name: WITHDRAWAL_QUEUE },
       { name: NOTIFICATION_QUEUE },
+      { name: SWEEP_QUEUE },
     ),
   ],
   exports: [BullModule],

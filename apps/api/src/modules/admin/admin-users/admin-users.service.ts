@@ -38,7 +38,7 @@ export class AdminUsersService {
           isSuspended: true,
           lastLoginAt: true,
           createdAt: true,
-          wallet: { select: { address: true, isLocked: true } },
+          wallet: { select: { id: true, address: true, isLocked: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,

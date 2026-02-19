@@ -8,7 +8,7 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
-import { TronService } from '../wallet/tron/tron.service';
+import { WalletService } from '../wallet/wallet.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreateWithdrawalDto } from './dto/create-withdrawal.dto';
 import { WITHDRAWAL_QUEUE } from '../queue/queue.constants';
@@ -23,7 +23,7 @@ export class WithdrawalService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly tronService: TronService,
+    private readonly walletService: WalletService,
     private readonly notificationService: NotificationService,
     @InjectQueue(WITHDRAWAL_QUEUE) private readonly withdrawalQueue: Queue,
   ) {}
@@ -50,37 +50,15 @@ export class WithdrawalService {
       throw new BadRequestException('Cannot withdraw to your own wallet address');
     }
 
-    // 4. Check on-chain balance minus pending withdrawals
+    // 4. Check DB-computed available balance (includes all sources)
     const tokenSymbol = dto.tokenSymbol || 'JOJU';
-    let currentBalance: string;
-    if (dto.tokenAddress) {
-      currentBalance = await this.tronService.getTrc20Balance(
-        wallet.address,
-        dto.tokenAddress,
-      );
-    } else {
-      currentBalance = await this.tronService.getBalance(wallet.address);
-    }
-
-    const pendingWithdrawals = await this.prisma.withdrawalRequest.findMany({
-      where: {
-        userId,
-        tokenSymbol,
-        status: { in: ['PENDING_24H', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING'] },
-      },
-      select: { amount: true },
-    });
-    const pendingSum = pendingWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
-
-    const onChain = Number(currentBalance);
     const requestedAmount = Number(dto.amount);
-    const availableForWithdrawal = onChain - pendingSum;
+    const availableBalance = await this.walletService.getAvailableBalance(userId, tokenSymbol);
 
-    if (availableForWithdrawal < requestedAmount) {
+    if (availableBalance < requestedAmount) {
       throw new BadRequestException(
-        'Insufficient on-chain balance for withdrawal. ' +
-          'Note: balances received via internal transfer cannot be withdrawn externally. ' +
-          `Available on-chain: ${availableForWithdrawal} ${tokenSymbol}`,
+        `Insufficient balance for withdrawal. ` +
+          `Available: ${availableBalance} ${tokenSymbol}`,
       );
     }
 
