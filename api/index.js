@@ -4,6 +4,14 @@ const { ExpressAdapter } = require('@nestjs/platform-express');
 const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
 const express = require('express');
 
+// Suppress Redis ECONNREFUSED crashes in serverless (no Redis available)
+process.on('unhandledRejection', (reason) => {
+  if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
+    return; // swallow Redis connection errors
+  }
+  console.error('Unhandled Rejection:', reason);
+});
+
 let cachedServer;
 
 async function bootstrap() {
@@ -38,9 +46,20 @@ async function bootstrap() {
 }
 
 module.exports = async (req, res) => {
-  if (!cachedServer) {
-    cachedServer = bootstrap();
+  try {
+    if (!cachedServer) {
+      cachedServer = bootstrap();
+    }
+    const server = await cachedServer;
+    server(req, res);
+  } catch (error) {
+    console.error('Serverless bootstrap error:', error);
+    // Reset cache so next invocation retries
+    cachedServer = null;
+    res.status(500).json({
+      statusCode: 500,
+      message: 'Server initialization failed',
+      error: error.message,
+    });
   }
-  const server = await cachedServer;
-  server(req, res);
 };
