@@ -1,5 +1,7 @@
 import {
   Injectable,
+  Logger,
+  Optional,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -14,11 +16,13 @@ import { WITHDRAWAL_QUEUE } from '../../queue/queue.constants';
 
 @Injectable()
 export class AdminWithdrawalsService {
+  private readonly logger = new Logger(AdminWithdrawalsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationService: NotificationService,
-    @InjectQueue(WITHDRAWAL_QUEUE) private readonly withdrawalQueue: Queue,
+    @Optional() @InjectQueue(WITHDRAWAL_QUEUE) private readonly withdrawalQueue?: Queue,
   ) {}
 
   async listWithdrawals(query: {
@@ -106,11 +110,17 @@ export class AdminWithdrawalsService {
         { withdrawalId },
       );
 
-      await this.withdrawalQueue.add(
-        'execute-withdrawal',
-        { withdrawalId },
-        { jobId: `exec-wd-${withdrawalId}` },
-      );
+      if (this.withdrawalQueue) {
+        await this.withdrawalQueue.add(
+          'execute-withdrawal',
+          { withdrawalId },
+          { jobId: `exec-wd-${withdrawalId}` },
+        );
+      } else {
+        this.logger.warn(
+          `BullMQ not available — withdrawal ${withdrawalId} execution job not queued`,
+        );
+      }
     } else {
       await this.prisma.withdrawalRequest.update({
         where: { id: withdrawalId },

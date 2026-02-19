@@ -18,26 +18,32 @@ import { BlockchainModule } from './modules/blockchain/blockchain.module';
 import { EmailModule } from './modules/email/email.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
+// On Vercel serverless, Redis is not available. Skip BullMQ queues, cron scheduling, and blockchain monitoring.
+const isServerless = !!process.env.VERCEL;
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
     }),
-    ScheduleModule.forRoot(),
+    // ScheduleModule drives @Cron in BlockMonitorService — skip on serverless
+    ...(isServerless ? [] : [ScheduleModule.forRoot()]),
     PrismaModule,
     RedisModule,
     HealthModule,
     AuthModule,
     UsersModule,
     WalletModule,
-    QueueModule,
+    // QueueModule requires Redis for BullMQ — skip on serverless (WithdrawalModule brings its own conditional import)
+    ...(isServerless ? [] : [QueueModule]),
     NotificationModule,
     TransactionModule,
     WithdrawalModule,
     AuditModule,
     AdminModule,
-    BlockchainModule,
+    // BlockchainModule runs block monitor cron + sweep processors — skip on serverless
+    ...(isServerless ? [] : [BlockchainModule]),
     EmailModule,
   ],
   providers: [

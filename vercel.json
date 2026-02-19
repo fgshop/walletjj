@@ -3,8 +3,7 @@
   "buildCommand": "pnpm turbo run build --filter=@joju/api...",
   "functions": {
     "api/index.js": {
-      "maxDuration": 60,
-      "includeFiles": "apps/api/dist/**"
+      "maxDuration": 60
     }
   },
   "rewrites": [

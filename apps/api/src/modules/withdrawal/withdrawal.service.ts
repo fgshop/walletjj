@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  Optional,
   BadRequestException,
   NotFoundException,
   ForbiddenException,
@@ -25,7 +26,7 @@ export class WithdrawalService {
     private readonly prisma: PrismaService,
     private readonly walletService: WalletService,
     private readonly notificationService: NotificationService,
-    @InjectQueue(WITHDRAWAL_QUEUE) private readonly withdrawalQueue: Queue,
+    @Optional() @InjectQueue(WITHDRAWAL_QUEUE) private readonly withdrawalQueue?: Queue,
   ) {}
 
   async createWithdrawal(userId: string, dto: CreateWithdrawalDto) {
@@ -86,12 +87,19 @@ export class WithdrawalService {
       },
     });
 
-    // 7. Register BullMQ delayed job for 24h transition
-    await this.withdrawalQueue.add(
-      'process-24h',
-      { withdrawalId: withdrawal.id },
-      { delay: TWENTY_FOUR_HOURS_MS, jobId: `withdrawal-24h-${withdrawal.id}` },
-    );
+    // 7. Register BullMQ delayed job for 24h transition (skipped on serverless — no Redis)
+    if (this.withdrawalQueue) {
+      await this.withdrawalQueue.add(
+        'process-24h',
+        { withdrawalId: withdrawal.id },
+        { delay: TWENTY_FOUR_HOURS_MS, jobId: `withdrawal-24h-${withdrawal.id}` },
+      );
+    } else {
+      this.logger.warn(
+        `BullMQ not available — withdrawal ${withdrawal.id} 24h timer not scheduled. ` +
+          `Admin must manually transition to PENDING_APPROVAL.`,
+      );
+    }
 
     // 8. Notify user
     await this.notificationService.create(

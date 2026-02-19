@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, Optional, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -33,7 +33,7 @@ export class AdminWalletsService {
     private readonly cryptoService: CryptoService,
     private readonly tronService: TronService,
     private readonly walletService: WalletService,
-    @InjectQueue(SWEEP_QUEUE) private readonly sweepQueue: Queue,
+    @Optional() @InjectQueue(SWEEP_QUEUE) private readonly sweepQueue?: Queue,
   ) {}
 
   async listWallets(query: AdminQueryDto) {
@@ -383,19 +383,21 @@ export class AdminWalletsService {
             },
           });
 
-          await this.sweepQueue.add('sweep-deposit', {
-            userId: wallet.userId,
-            walletAddress: wallet.address,
-            tokenSymbol: 'JOJU',
-            tokenAddress: null,
-            depositTxId: depositTx.id,
-            amount: balanceTrx.toString(),
-          }, {
-            jobId: `sweep-migration-${wallet.address}-JOJU`,
-            delay: 5_000,
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 60_000 },
-          });
+          if (this.sweepQueue) {
+            await this.sweepQueue.add('sweep-deposit', {
+              userId: wallet.userId,
+              walletAddress: wallet.address,
+              tokenSymbol: 'JOJU',
+              tokenAddress: null,
+              depositTxId: depositTx.id,
+              amount: balanceTrx.toString(),
+            }, {
+              jobId: `sweep-migration-${wallet.address}-JOJU`,
+              delay: 5_000,
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 60_000 },
+            });
+          }
 
           results.push({ address: wallet.address, symbol: 'JOJU', amount: balanceTrx.toString(), status: 'migrated' });
         }
@@ -444,19 +446,21 @@ export class AdminWalletsService {
               },
             });
 
-            await this.sweepQueue.add('sweep-deposit', {
-              userId: wallet.userId,
-              walletAddress: wallet.address,
-              tokenSymbol: token.symbol,
-              tokenAddress: token.contractAddress,
-              depositTxId: depositTx.id,
-              amount: balance.toString(),
-            }, {
-              jobId: `sweep-migration-${wallet.address}-${token.symbol}`,
-              delay: 5_000,
-              attempts: 3,
-              backoff: { type: 'exponential', delay: 60_000 },
-            });
+            if (this.sweepQueue) {
+              await this.sweepQueue.add('sweep-deposit', {
+                userId: wallet.userId,
+                walletAddress: wallet.address,
+                tokenSymbol: token.symbol,
+                tokenAddress: token.contractAddress,
+                depositTxId: depositTx.id,
+                amount: balance.toString(),
+              }, {
+                jobId: `sweep-migration-${wallet.address}-${token.symbol}`,
+                delay: 5_000,
+                attempts: 3,
+                backoff: { type: 'exponential', delay: 60_000 },
+              });
+            }
 
             results.push({ address: wallet.address, symbol: token.symbol, amount: balance.toString(), status: 'migrated' });
           }

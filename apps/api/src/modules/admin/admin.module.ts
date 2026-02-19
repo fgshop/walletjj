@@ -31,13 +31,16 @@ import { NotificationModule } from '../notification/notification.module';
 import { QueueModule } from '../queue/queue.module';
 import { WalletModule } from '../wallet/wallet.module';
 
+const isServerless = !!process.env.VERCEL;
+
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({}),
     AuditModule,
     NotificationModule,
-    QueueModule,
+    // QueueModule requires Redis — skip on serverless
+    ...(isServerless ? [] : [QueueModule]),
     WalletModule,
   ],
   controllers: [
