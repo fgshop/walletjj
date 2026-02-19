@@ -2,7 +2,7 @@
 
 > **Project Codename:** JOJUWallet
 > **Version:** 1.0.0
-> **Last Updated:** 2026-02-16
+> **Last Updated:** 2026-02-18
 > **Reference Model:** TRONLink
 > **Chain:** TRON Network (Single Chain)
 > **Wallet Type:** Centralized (Custodial)
