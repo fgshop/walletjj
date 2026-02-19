@@ -13,6 +13,11 @@ export class AdminQueryDto {
   @IsString()
   status?: string;
 
+  @ApiPropertyOptional({ description: 'Transaction type filter (INTERNAL, EXTERNAL_SEND, EXTERNAL_RECEIVE, DEPOSIT, SWEEP)' })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)

@@ -8,17 +8,17 @@ export class AdminTransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listTransactions(query: AdminQueryDto) {
-    const { search, status, page = 1, limit = 20 } = query;
+    const { search, status, type, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TransactionWhereInput = {};
 
-    if (status) {
-      if (['INTERNAL', 'EXTERNAL_SEND', 'EXTERNAL_RECEIVE', 'DEPOSIT'].includes(status)) {
-        where.type = status as any;
-      } else if (['PENDING', 'CONFIRMED', 'FAILED'].includes(status)) {
-        where.status = status as any;
-      }
+    if (type && ['INTERNAL', 'EXTERNAL_SEND', 'EXTERNAL_RECEIVE', 'DEPOSIT', 'SWEEP'].includes(type)) {
+      where.type = type as any;
+    }
+
+    if (status && ['PENDING', 'CONFIRMED', 'FAILED'].includes(status)) {
+      where.status = status as any;
     }
 
     if (search) {
