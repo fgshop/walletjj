@@ -1,5 +1,5 @@
 # Hot Wallet / Sweep Architecture
-
+# 2026.02.18
 ## 배경: 왜 이 변경이 필요했는가
 
 ### 기존 아키텍처의 문제
