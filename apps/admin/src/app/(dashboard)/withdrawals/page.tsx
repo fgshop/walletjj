@@ -34,7 +34,7 @@ export default function WithdrawalsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   const [reviewTarget, setReviewTarget] = useState<Withdrawal | null>(null);
-  const [reviewAction, setReviewAction] = useState<'APPROVED' | 'REJECTED'>('APPROVED');
+  const [reviewAction, setReviewAction] = useState<'APPROVE' | 'REJECT'>('APPROVE');
   const [reviewReason, setReviewReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -68,7 +68,7 @@ export default function WithdrawalsPage() {
     try {
       await api.post(`/admin/withdrawals/${reviewTarget.id}/review`, {
         action: reviewAction,
-        reason: reviewReason || undefined,
+        note: reviewReason || undefined,
       });
       setReviewTarget(null);
       setReviewReason('');
@@ -80,7 +80,7 @@ export default function WithdrawalsPage() {
     }
   };
 
-  const openReview = (row: Withdrawal, action: 'APPROVED' | 'REJECTED') => {
+  const openReview = (row: Withdrawal, action: 'APPROVE' | 'REJECT') => {
     setReviewTarget(row);
     setReviewAction(action);
     setReviewReason('');
@@ -149,13 +149,13 @@ export default function WithdrawalsPage() {
           row.status === 'PENDING_APPROVAL' ? (
             <div className="flex gap-1">
               <button
-                onClick={() => openReview(row, 'APPROVED')}
+                onClick={() => openReview(row, 'APPROVE')}
                 className="rounded-lg border border-emerald-500/30 px-3 py-1 text-xs font-medium text-emerald-400 transition-all duration-200 hover:bg-emerald-500/10"
               >
                 승인
               </button>
               <button
-                onClick={() => openReview(row, 'REJECTED')}
+                onClick={() => openReview(row, 'REJECT')}
                 className="rounded-lg border border-red-500/30 px-3 py-1 text-xs font-medium text-red-400 transition-all duration-200 hover:bg-red-500/10"
               >
                 거부
@@ -168,7 +168,7 @@ export default function WithdrawalsPage() {
       <Modal
         open={!!reviewTarget}
         onClose={() => setReviewTarget(null)}
-        title={reviewAction === 'APPROVED' ? '출금 승인' : '출금 거부'}
+        title={reviewAction === 'APPROVE' ? '출금 승인' : '출금 거부'}
         actions={
           <>
             <button
@@ -181,12 +181,12 @@ export default function WithdrawalsPage() {
               onClick={handleReview}
               disabled={actionLoading}
               className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200 disabled:opacity-60 ${
-                reviewAction === 'APPROVED'
+                reviewAction === 'APPROVE'
                   ? 'bg-emerald-600/80 hover:bg-emerald-600 hover:shadow-lg hover:shadow-emerald-500/20'
                   : 'bg-red-600/80 hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/20'
               }`}
             >
-              {actionLoading ? '처리 중...' : reviewAction === 'APPROVED' ? '승인' : '거부'}
+              {actionLoading ? '처리 중...' : reviewAction === 'APPROVE' ? '승인' : '거부'}
             </button>
           </>
         }
@@ -195,11 +195,11 @@ export default function WithdrawalsPage() {
           <div className="space-y-3">
             <p>
               <span className="font-medium text-text">{reviewTarget.user?.email}</span>의 출금 요청을{' '}
-              {reviewAction === 'APPROVED' ? '승인' : '거부'}하시겠습니까?
+              {reviewAction === 'APPROVE' ? '승인' : '거부'}하시겠습니까?
             </p>
             <p className="font-mono text-text">금액: {reviewTarget.amount}</p>
             <p className="font-mono text-xs text-text-secondary">주소: {reviewTarget.toAddress}</p>
-            {reviewAction === 'REJECTED' && (
+            {reviewAction === 'REJECT' && (
               <div>
                 <label className="mb-1 block text-xs font-medium text-text">거부 사유</label>
                 <input

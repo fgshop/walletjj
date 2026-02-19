@@ -54,6 +54,8 @@ export default function WalletsPage() {
   const [sweepLoading, setSweepLoading] = useState<Record<string, boolean>>({});
   const [migrateLoading, setMigrateLoading] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<string | null>(null);
 
   // Balance state: walletId -> WalletBalance
   const [balances, setBalances] = useState<Record<string, WalletBalance>>({});
@@ -85,28 +87,23 @@ export default function WalletsPage() {
     walletList.forEach((w) => { loadingState[w.id] = true; });
     setBalanceLoading((prev) => ({ ...prev, ...loadingState }));
 
-    // Fetch balances in parallel
-    const results = await Promise.allSettled(
-      walletList.map((w) => api.get(`/admin/wallets/${w.id}/balance`))
-    );
-
-    const newBalances: Record<string, WalletBalance> = {};
-    const doneLoading: Record<string, boolean> = {};
-
-    results.forEach((result, i) => {
-      const walletId = walletList[i].id;
-      doneLoading[walletId] = false;
-      if (result.status === 'fulfilled') {
-        const data = result.value.data.data || result.value.data;
-        newBalances[walletId] = {
-          balances: data.balances || [],
-          pendingBySymbol: data.pendingBySymbol || {},
-        };
+    // Fetch balances sequentially to avoid TronGrid rate limits
+    for (const w of walletList) {
+      try {
+        const res = await api.get(`/admin/wallets/${w.id}/balance`);
+        const data = res.data.data || res.data;
+        setBalances((prev) => ({
+          ...prev,
+          [w.id]: {
+            balances: data.balances || [],
+            pendingBySymbol: data.pendingBySymbol || {},
+          },
+        }));
+      } catch {
+        // skip failed wallet
       }
-    });
-
-    setBalances((prev) => ({ ...prev, ...newBalances }));
-    setBalanceLoading((prev) => ({ ...prev, ...doneLoading }));
+      setBalanceLoading((prev) => ({ ...prev, [w.id]: false }));
+    }
   }, []);
 
   useEffect(() => {
@@ -159,6 +156,28 @@ export default function WalletsPage() {
       setMigrateResult('마이그레이션 실패');
     } finally {
       setMigrateLoading(false);
+    }
+  };
+
+  const handleReconcile = async () => {
+    if (!confirm('온체인 잔액을 오프체인(DB) 잔액에 맞게 동기화하시겠습니까?\n(초과분 → Hot Wallet, 부족분 ← Hot Wallet)')) return;
+    setReconcileLoading(true);
+    setReconcileResult(null);
+    try {
+      const res = await api.post('/admin/wallets/reconcile');
+      const data = res.data.data || res.data;
+      const results = data.results || [];
+      const swept = results.filter((r: any) => r.action === 'swept-excess').length;
+      const topped = results.filter((r: any) => r.action === 'topped-up').length;
+      const synced = results.filter((r: any) => r.action === 'synced').length;
+      const errors = results.filter((r: any) => r.action.includes('error')).length;
+      setReconcileResult(`동기화 완료: ${synced}건 일치, ${swept}건 회수, ${topped}건 보충${errors > 0 ? `, ${errors}건 오류` : ''}`);
+      const items = await fetchWallets();
+      if (items.length > 0) fetchBalances(items);
+    } catch {
+      setReconcileResult('동기화 실패');
+    } finally {
+      setReconcileLoading(false);
     }
   };
 
@@ -246,12 +265,19 @@ export default function WalletsPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">지갑 관리</h1>
         <div className="flex items-center gap-3">
-          {migrateResult && (
-            <span className="text-xs text-text-secondary">{migrateResult}</span>
+          {(migrateResult || reconcileResult) && (
+            <span className="text-xs text-text-secondary">{reconcileResult || migrateResult}</span>
           )}
           <button
+            onClick={handleReconcile}
+            disabled={reconcileLoading || migrateLoading}
+            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 transition-all duration-200 hover:bg-emerald-500/20 disabled:opacity-50"
+          >
+            {reconcileLoading ? '동기화 중...' : '잔액 동기화'}
+          </button>
+          <button
             onClick={handleMigrateAll}
-            disabled={migrateLoading}
+            disabled={migrateLoading || reconcileLoading}
             className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-400 transition-all duration-200 hover:bg-cyan-500/20 disabled:opacity-50"
           >
             {migrateLoading ? '처리 중...' : '전체 마이그레이션'}

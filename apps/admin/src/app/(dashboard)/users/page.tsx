@@ -61,28 +61,27 @@ export default function UsersPage() {
       }
       setBalanceMap(initial);
 
-      // Fetch balances in parallel (limit concurrency to avoid API overload)
+      // Fetch balances sequentially to avoid TronGrid rate limits
       for (const { walletId } of walletsToFetch) {
-        api.get(`/admin/wallets/${walletId}/balance`)
-          .then((res) => {
-            const d: WalletBalanceData = res.data.data || res.data;
-            const onchainJoju = d.balances?.find((b) => b.symbol === 'JOJU');
-            const offchainJoju = d.offchainBalances?.find((b) => b.symbol === 'JOJU');
-            setBalanceMap((prev) => ({
-              ...prev,
-              [walletId]: {
-                onchain: fmtBal(onchainJoju?.balance ?? '0'),
-                offchain: fmtBal(offchainJoju?.balance ?? '0'),
-                loading: false,
-              },
-            }));
-          })
-          .catch(() => {
-            setBalanceMap((prev) => ({
-              ...prev,
-              [walletId]: { onchain: 'err', offchain: 'err', loading: false },
-            }));
-          });
+        try {
+          const res = await api.get(`/admin/wallets/${walletId}/balance`);
+          const d: WalletBalanceData = res.data.data || res.data;
+          const onchainJoju = d.balances?.find((b) => b.symbol === 'JOJU');
+          const offchainJoju = d.offchainBalances?.find((b) => b.symbol === 'JOJU');
+          setBalanceMap((prev) => ({
+            ...prev,
+            [walletId]: {
+              onchain: fmtBal(onchainJoju?.balance ?? '0'),
+              offchain: fmtBal(offchainJoju?.balance ?? '0'),
+              loading: false,
+            },
+          }));
+        } catch {
+          setBalanceMap((prev) => ({
+            ...prev,
+            [walletId]: { onchain: 'err', offchain: 'err', loading: false },
+          }));
+        }
       }
     } catch {
       /* handled by interceptor */

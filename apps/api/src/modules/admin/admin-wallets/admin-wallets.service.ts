@@ -4,11 +4,23 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationService } from '../../notification/notification.service';
+import { CryptoService } from '../../wallet/crypto/crypto.service';
 import { TronService } from '../../wallet/tron/tron.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { AdminQueryDto } from '../dto/admin-query.dto';
 import { SWEEP_QUEUE } from '../../queue/queue.constants';
 import { Prisma, TxType, TxStatus } from '@prisma/client';
+
+export interface ReconcileResult {
+  address: string;
+  symbol: string;
+  onchain: number;
+  offchain: number;
+  diff: number;
+  action: string;
+  txHash?: string;
+  error?: string;
+}
 
 @Injectable()
 export class AdminWalletsService {
@@ -18,6 +30,7 @@ export class AdminWalletsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationService: NotificationService,
+    private readonly cryptoService: CryptoService,
     private readonly tronService: TronService,
     private readonly walletService: WalletService,
     @InjectQueue(SWEEP_QUEUE) private readonly sweepQueue: Queue,
@@ -202,6 +215,140 @@ export class AdminWalletsService {
     return { message: 'Migration completed', results: allResults };
   }
 
+  /**
+   * Reconcile all wallets: make on-chain balance match off-chain (DB) balance.
+   * Phase 1: Sweep excess (on-chain > off-chain) → sends surplus from user wallet to Hot Wallet.
+   * Phase 2: Top up deficit (off-chain > on-chain) → sends deficit from Hot Wallet to user wallet.
+   * All movements are recorded as SWEEP transactions (excluded from balance calc).
+   */
+  async reconcileBalances(adminId: string, ipAddress: string) {
+    const wallets = await this.prisma.wallet.findMany({
+      select: { id: true, address: true, userId: true, encryptedKey: true },
+    });
+
+    const masterWallet = await this.prisma.masterWallet.findFirst({
+      where: { isActive: true },
+    });
+    if (!masterWallet) throw new NotFoundException('No active master wallet');
+
+    const hotKey = this.cryptoService.decrypt(masterWallet.encryptedKey);
+
+    const results: ReconcileResult[] = [];
+
+    // Phase 1: Sweep excess (on-chain > off-chain) — collects funds into Hot Wallet first
+    for (const wallet of wallets) {
+      if (wallet.address === masterWallet.address) continue;
+
+      try {
+        const onchainSun = Number(await this.tronService.getBalance(wallet.address));
+        const onchain = onchainSun / 1_000_000;
+        const offchain = await this.walletService.getComputedBalance(wallet.userId, 'JOJU');
+        const diff = offchain - onchain;
+
+        if (Math.abs(diff) < 0.01) {
+          results.push({ address: wallet.address, symbol: 'JOJU', onchain, offchain, diff: 0, action: 'synced' });
+          continue;
+        }
+
+        if (diff < 0) {
+          // On-chain > off-chain → sweep excess to Hot Wallet
+          const excessSun = Math.floor(Math.abs(diff) * 1_000_000);
+          const userKey = this.cryptoService.decrypt(wallet.encryptedKey);
+          const txHash = await this.tronService.sendTrx(userKey, masterWallet.address, excessSun);
+
+          await this.recordReconcileTx(
+            txHash, wallet.userId, wallet.address, masterWallet.address,
+            Math.abs(diff).toString(), 'JOJU', null, 'reconcile-sweep',
+          );
+          results.push({ address: wallet.address, symbol: 'JOJU', onchain, offchain, diff, action: 'swept-excess', txHash });
+        } else {
+          // Mark for Phase 2
+          results.push({ address: wallet.address, symbol: 'JOJU', onchain, offchain, diff, action: 'needs-topup' });
+        }
+      } catch (err) {
+        results.push({ address: wallet.address, symbol: 'JOJU', onchain: 0, offchain: 0, diff: 0, action: 'error', error: String(err) });
+      }
+    }
+
+    // Brief wait for sweep transactions to settle before topping up
+    const hadSweeps = results.some((r) => r.action === 'swept-excess');
+    if (hadSweeps) await new Promise((r) => setTimeout(r, 3_000));
+
+    // Phase 2: Top up deficit (off-chain > on-chain) — uses Hot Wallet funds
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].action !== 'needs-topup') continue;
+
+      const wallet = wallets.find((w) => w.address === results[i].address);
+      if (!wallet) continue;
+
+      try {
+        const deficitSun = Math.floor(results[i].diff * 1_000_000);
+
+        // Check Hot Wallet can afford this top-up
+        const hotBalanceSun = Number(await this.tronService.getBalance(masterWallet.address));
+        if (hotBalanceSun < deficitSun + 1_000_000) {
+          results[i] = { ...results[i], action: 'skipped-hot-insufficient' };
+          continue;
+        }
+
+        const txHash = await this.tronService.sendTrx(hotKey, wallet.address, deficitSun);
+
+        await this.recordReconcileTx(
+          txHash, wallet.userId, masterWallet.address, wallet.address,
+          results[i].diff.toString(), 'JOJU', null, 'reconcile-topup',
+        );
+        results[i] = { ...results[i], action: 'topped-up', txHash };
+      } catch (err) {
+        results[i] = { ...results[i], action: 'topup-error', error: String(err) };
+      }
+    }
+
+    await this.auditService.log(
+      adminId, 'WALLET_RECONCILE', 'System', 'all',
+      {
+        swept: results.filter((r) => r.action === 'swept-excess').length,
+        toppedUp: results.filter((r) => r.action === 'topped-up').length,
+        synced: results.filter((r) => r.action === 'synced').length,
+        errors: results.filter((r) => r.action.includes('error')).length,
+      },
+      ipAddress,
+    );
+
+    return { message: 'Reconciliation completed', results };
+  }
+
+  private async recordReconcileTx(
+    txHash: string,
+    userId: string,
+    fromAddress: string,
+    toAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    tokenAddress: string | null,
+    memo: string,
+  ) {
+    try {
+      await this.prisma.transaction.create({
+        data: {
+          txHash,
+          type: TxType.SWEEP,
+          status: TxStatus.CONFIRMED,
+          fromUserId: userId,
+          fromAddress,
+          toAddress,
+          amount,
+          tokenSymbol,
+          tokenAddress,
+          confirmedAt: new Date(),
+          memo,
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') return; // duplicate txHash
+      throw err;
+    }
+  }
+
   private async migrateAndSweepWallet(
     wallet: { id: string; address: string; userId: string },
   ): Promise<Array<{ address: string; symbol: string; amount: string; status: string }>> {
@@ -262,7 +409,13 @@ export class AdminWalletsService {
     const tokens = await this.prisma.supportedToken.findMany({ where: { isActive: true } });
     for (const token of tokens) {
       try {
-        const rawBalance = await this.tronService.getTrc20Balance(wallet.address, token.contractAddress);
+        let rawBalance: string;
+        try {
+          rawBalance = await this.tronService.getTrc20Balance(wallet.address, token.contractAddress);
+        } catch {
+          // TRC-20 call can fail for accounts with no activity — skip silently
+          continue;
+        }
         const balance = token.decimals > 0
           ? Number(rawBalance) / Math.pow(10, token.decimals)
           : Number(rawBalance);
@@ -330,12 +483,11 @@ export class AdminWalletsService {
     try {
       const trxSun = await this.tronService.getBalance(wallet.address);
       balances.push({ symbol: 'JOJU', balance: (Number(trxSun) / 1_000_000).toString(), decimals: 6 });
-    } catch (err) {
-      this.logger.warn(`Failed to fetch TRX balance for ${wallet.address}: ${err}`);
+    } catch {
       balances.push({ symbol: 'JOJU', balance: '0', decimals: 6 });
     }
 
-    // Fetch TRC-20 token balances
+    // Fetch TRC-20 token balances (with delay to avoid rate limits)
     const tokens = await this.prisma.supportedToken.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
@@ -348,8 +500,9 @@ export class AdminWalletsService {
           ? (Number(rawBalance) / Math.pow(10, token.decimals)).toString()
           : rawBalance;
         balances.push({ symbol: token.symbol, balance: normalized, decimals: token.decimals });
-      } catch (err) {
-        this.logger.warn(`Failed to fetch ${token.symbol} balance for ${wallet.address}: ${err}`);
+      } catch {
+        // Silently skip — TRC-20 calls can fail for accounts with no token activity
+        balances.push({ symbol: token.symbol, balance: '0', decimals: token.decimals });
       }
     }
 

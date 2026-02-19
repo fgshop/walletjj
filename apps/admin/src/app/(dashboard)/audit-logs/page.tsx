@@ -6,11 +6,11 @@ import DataTable, { Column } from '../../../components/DataTable';
 
 interface AuditLog {
   id: string;
-  adminName: string;
+  admin?: { name: string; email: string; role: string };
   action: string;
   resource: string;
   resourceId?: string;
-  details?: string;
+  details?: Record<string, unknown> | null;
   ipAddress?: string;
   createdAt: string;
   [key: string]: unknown;
@@ -44,7 +44,17 @@ export default function AuditLogsPage() {
   }, [fetchLogs]);
 
   const columns: Column<AuditLog>[] = [
-    { key: 'adminName', label: '관리자', sortable: true },
+    {
+      key: 'admin',
+      label: '관리자',
+      sortable: true,
+      render: (row) => (
+        <div>
+          <span className="text-text font-medium">{row.admin?.name || '-'}</span>
+          <p className="text-[11px] text-text-secondary">{row.admin?.email || ''}</p>
+        </div>
+      ),
+    },
     { key: 'action', label: '행위', sortable: true },
     { key: 'resource', label: '대상' },
     {
@@ -61,8 +71,8 @@ export default function AuditLogsPage() {
       key: 'details',
       label: '상세',
       render: (row) => (
-        <span className="max-w-[200px] truncate block text-xs text-text-secondary">
-          {row.details || '-'}
+        <span className="max-w-[200px] truncate block text-xs text-text-secondary" title={row.details ? JSON.stringify(row.details) : ''}>
+          {row.details ? JSON.stringify(row.details) : '-'}
         </span>
       ),
     },

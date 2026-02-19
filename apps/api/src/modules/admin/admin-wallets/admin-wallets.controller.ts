@@ -42,6 +42,16 @@ export class AdminWalletsController {
     return this.adminWalletsService.migrateAllBalances(adminId, req.ip || '');
   }
 
+  @Post('reconcile')
+  @AdminRoles('SUPER_ADMIN' as any)
+  @ApiOperation({ summary: 'Reconcile on-chain balances to match off-chain (DB) balances' })
+  async reconcileBalances(
+    @CurrentAdmin('id') adminId: string,
+    @Req() req: Request,
+  ) {
+    return this.adminWalletsService.reconcileBalances(adminId, req.ip || '');
+  }
+
   @Post(':id/sweep')
   @AdminRoles('ADMIN' as any)
   @ApiOperation({ summary: 'Sweep a single wallet to hot wallet' })
