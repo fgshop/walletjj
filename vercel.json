@@ -1,5 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm turbo run build --filter=@joju/api...",
-  "outputDirectory": "apps/api/dist"
+  "outputDirectory": "apps/api/dist",
+  "functions": {
+    "vercel.js": {
+      "includeFiles": "**"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/vercel.js" }
+  ]
 }
