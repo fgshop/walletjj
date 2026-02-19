@@ -9,7 +9,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationService } from '../../notification/notification.service';
 import { ReviewAction } from '../dto/review-withdrawal.dto';
-import { WithdrawalStatus, Prisma } from '@prisma/client';
+import { WithdrawalStatus } from '@prisma/client';
 import { WITHDRAWAL_QUEUE } from '../../queue/queue.constants';
 
 @Injectable()
@@ -29,7 +29,7 @@ export class AdminWithdrawalsService {
     const { status, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.WithdrawalRequestWhereInput = {};
+    const where: Record<string, any> = {};
     if (status) {
       where.status = status as WithdrawalStatus;
     }

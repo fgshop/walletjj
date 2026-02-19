@@ -11,7 +11,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { NotificationService } from '../notification/notification.service';
 import { InternalTransferDto } from './dto/internal-transfer.dto';
 import { TransactionQueryDto } from './dto/transaction-query.dto';
-import { TxType, TxStatus, Prisma } from '@prisma/client';
+import { TxType, TxStatus } from '@prisma/client';
 import { isValidTronAddress, isValidEmail } from '@joju/utils';
 
 @Injectable()
@@ -145,7 +145,7 @@ export class TransactionService {
     const { type, status, startDate, endDate, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.TransactionWhereInput = {
+    const where: Record<string, any> = {
       OR: [{ fromUserId: userId }, { toUserId: userId }],
       // Hide SWEEP transactions from user-facing list
       type: { not: TxType.SWEEP },

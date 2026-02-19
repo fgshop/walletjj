@@ -3,7 +3,6 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationService } from '../../notification/notification.service';
 import { AdminQueryDto } from '../dto/admin-query.dto';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AdminUsersService {
@@ -17,7 +16,7 @@ export class AdminUsersService {
     const { search, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.UserWhereInput = {};
+    const where: Record<string, any> = {};
     if (search) {
       where.OR = [
         { email: { contains: search } },

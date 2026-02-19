@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AuditService {
@@ -22,7 +21,7 @@ export class AuditService {
         action,
         resource,
         resourceId,
-        details: details ?? Prisma.JsonNull,
+        details: details ?? undefined,
         ipAddress,
       },
     });
@@ -44,7 +43,7 @@ export class AuditService {
     const { adminId, action, resource, startDate, endDate, page = 1, limit = 50 } = filters;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.AuditLogWhereInput = {};
+    const where: Record<string, any> = {};
     if (adminId) where.adminId = adminId;
     if (action) where.action = action;
     if (resource) where.resource = resource;

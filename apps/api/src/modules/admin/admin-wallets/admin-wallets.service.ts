@@ -9,7 +9,7 @@ import { TronService } from '../../wallet/tron/tron.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { AdminQueryDto } from '../dto/admin-query.dto';
 import { SWEEP_QUEUE } from '../../queue/queue.constants';
-import { Prisma, TxType, TxStatus } from '@prisma/client';
+import { TxType, TxStatus } from '@prisma/client';
 
 export interface ReconcileResult {
   address: string;
@@ -40,7 +40,7 @@ export class AdminWalletsService {
     const { search, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.WalletWhereInput = {};
+    const where: Record<string, any> = {};
     if (search) {
       where.OR = [
         { address: { contains: search } },

@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminQueryDto } from '../dto/admin-query.dto';
-import { Prisma } from '@prisma/client';
-
 @Injectable()
 export class AdminTransactionsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -11,7 +9,7 @@ export class AdminTransactionsService {
     const { search, status, type, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.TransactionWhereInput = {};
+    const where: Record<string, any> = {};
 
     if (type && ['INTERNAL', 'EXTERNAL_SEND', 'EXTERNAL_RECEIVE', 'DEPOSIT', 'SWEEP'].includes(type)) {
       where.type = type as any;
