@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-# api
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://jojuwallet-api.vercel.app/api/v1',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://jojuwallet-api.vercel.app/v1',
   headers: { 'Content-Type': 'application/json' },
 });
 
