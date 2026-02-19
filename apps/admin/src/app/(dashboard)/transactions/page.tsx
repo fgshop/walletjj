@@ -23,13 +23,14 @@ interface Transaction {
   [key: string]: unknown;
 }
 
-const TYPE_FILTERS = ['ALL', 'INTERNAL', 'EXTERNAL_SEND', 'EXTERNAL_RECEIVE', 'DEPOSIT'] as const;
+const TYPE_FILTERS = ['ALL', 'INTERNAL', 'EXTERNAL_SEND', 'EXTERNAL_RECEIVE', 'DEPOSIT', 'SWEEP'] as const;
 const TYPE_LABELS: Record<string, string> = {
   ALL: '전체',
   INTERNAL: '내부 전송',
   EXTERNAL_SEND: '외부 출금',
   EXTERNAL_RECEIVE: '외부 입금',
   DEPOSIT: '입금',
+  SWEEP: 'Sweep',
 };
 
 const STATUS_FILTERS = ['ALL', 'PENDING', 'CONFIRMED', 'FAILED'] as const;
@@ -61,7 +62,7 @@ export default function TransactionsPage() {
     setLoading(true);
     try {
       const params: Record<string, string | number | undefined> = { page, limit: 20 };
-      if (typeFilter !== 'ALL') params.status = typeFilter;
+      if (typeFilter !== 'ALL') params.type = typeFilter;
       if (statusFilter !== 'ALL') params.status = statusFilter;
       if (search) params.search = search;
 
@@ -311,6 +312,7 @@ function typeStyle(type: string) {
     case 'EXTERNAL_SEND': return 'bg-orange-500/15 text-orange-400';
     case 'EXTERNAL_RECEIVE': return 'bg-emerald-500/15 text-emerald-400';
     case 'DEPOSIT': return 'bg-purple-500/15 text-purple-400';
+    case 'SWEEP': return 'bg-cyan-500/15 text-cyan-400';
     default: return 'bg-slate-500/15 text-slate-400';
   }
 }
@@ -334,6 +336,12 @@ function typeIcon(type: string) {
       return (
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 4.5l-15 15m0 0h11.25m-11.25 0V8.25" />
+        </svg>
+      );
+    case 'SWEEP':
+      return (
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
         </svg>
       );
     default:

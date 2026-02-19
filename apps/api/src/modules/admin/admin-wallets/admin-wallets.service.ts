@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -468,6 +468,132 @@ export class AdminWalletsService {
     }
 
     return results;
+  }
+
+  /**
+   * Admin-initiated on-chain transfer from any system wallet to any TRON address.
+   * Uses the source wallet's encrypted private key from DB.
+   * Recorded as SWEEP (does not affect user off-chain balances).
+   */
+  async adminTransfer(
+    adminId: string,
+    fromWalletId: string,
+    toAddress: string,
+    amount: number,
+    tokenSymbol: string,
+    ipAddress: string,
+  ) {
+    // Resolve source wallet (user wallet or master wallet)
+    let fromAddress: string;
+    let encryptedKey: string;
+    let fromUserId: string | null = null;
+
+    const userWallet = await this.prisma.wallet.findUnique({
+      where: { id: fromWalletId },
+      select: { address: true, encryptedKey: true, userId: true },
+    });
+
+    if (userWallet) {
+      fromAddress = userWallet.address;
+      encryptedKey = userWallet.encryptedKey;
+      fromUserId = userWallet.userId;
+    } else {
+      // Check if it's the master wallet
+      const master = await this.prisma.masterWallet.findUnique({
+        where: { id: fromWalletId },
+      });
+      if (!master) throw new NotFoundException('Source wallet not found');
+      fromAddress = master.address;
+      encryptedKey = master.encryptedKey;
+    }
+
+    if (fromAddress === toAddress) {
+      throw new BadRequestException('Source and destination cannot be the same');
+    }
+
+    if (amount <= 0) {
+      throw new BadRequestException('Amount must be greater than 0');
+    }
+
+    // Resolve token
+    const isNative = tokenSymbol === 'JOJU';
+    let tokenAddress: string | null = null;
+
+    if (!isNative) {
+      const token = await this.prisma.supportedToken.findFirst({
+        where: { symbol: tokenSymbol, isActive: true },
+      });
+      if (!token) throw new NotFoundException(`Token ${tokenSymbol} not found`);
+      tokenAddress = token.contractAddress;
+    }
+
+    // Check on-chain balance
+    const privateKey = this.cryptoService.decrypt(encryptedKey);
+
+    if (isNative) {
+      const balanceSun = Number(await this.tronService.getBalance(fromAddress));
+      const balance = balanceSun / 1_000_000;
+      if (balance < amount + 1) {
+        throw new BadRequestException(
+          `Insufficient on-chain balance: ${balance} JOJU (need ${amount} + ~1 gas)`,
+        );
+      }
+    } else {
+      const tokenBalance = await this.tronService.getTrc20Balance(fromAddress, tokenAddress!);
+      if (Number(tokenBalance) < amount) {
+        throw new BadRequestException(
+          `Insufficient ${tokenSymbol} balance: ${tokenBalance}`,
+        );
+      }
+    }
+
+    // Execute transfer
+    let txHash: string;
+    if (isNative) {
+      const amountSun = Math.floor(amount * 1_000_000);
+      txHash = await this.tronService.sendTrx(privateKey, toAddress, amountSun);
+    } else {
+      // Ensure sender has TRX for gas
+      const senderTrxSun = Number(await this.tronService.getBalance(fromAddress));
+      if (senderTrxSun < 15_000_000) {
+        const masterWallet = await this.prisma.masterWallet.findFirst({ where: { isActive: true } });
+        if (masterWallet && fromAddress !== masterWallet.address) {
+          const hotKey = this.cryptoService.decrypt(masterWallet.encryptedKey);
+          await this.tronService.sendTrx(hotKey, fromAddress, 15_000_000 - senderTrxSun);
+          await new Promise((r) => setTimeout(r, 5_000));
+        }
+      }
+      txHash = await this.tronService.sendTrc20(privateKey, toAddress, tokenAddress!, amount.toString());
+    }
+
+    // Record as SWEEP (admin operation, not affecting user balance)
+    await this.prisma.transaction.create({
+      data: {
+        txHash,
+        type: TxType.SWEEP,
+        status: TxStatus.CONFIRMED,
+        fromUserId,
+        fromAddress,
+        toAddress,
+        amount: amount.toString(),
+        tokenSymbol,
+        tokenAddress,
+        confirmedAt: new Date(),
+        memo: 'admin-transfer',
+      },
+    }).catch((err: any) => {
+      if (err?.code !== 'P2002') throw err;
+    });
+
+    await this.auditService.log(
+      adminId, 'ADMIN_TRANSFER', 'Wallet', fromWalletId,
+      { fromAddress, toAddress, amount, tokenSymbol, txHash },
+      ipAddress,
+    );
+
+    this.logger.log(`Admin transfer: ${amount} ${tokenSymbol} from ${fromAddress} → ${toAddress} (TX: ${txHash})`);
+
+    return { message: 'Transfer completed', txHash, fromAddress, toAddress, amount, tokenSymbol };
   }
 
   async getWalletBalance(walletId: string) {

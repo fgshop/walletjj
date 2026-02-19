@@ -57,6 +57,13 @@ export default function WalletsPage() {
   const [reconcileLoading, setReconcileLoading] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<string | null>(null);
 
+  // Transfer modal state
+  const [transferSource, setTransferSource] = useState<Wallet | null>(null);
+  const [transferTo, setTransferTo] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferResult, setTransferResult] = useState<string | null>(null);
+
   // Balance state: walletId -> WalletBalance
   const [balances, setBalances] = useState<Record<string, WalletBalance>>({});
   const [balanceLoading, setBalanceLoading] = useState<Record<string, boolean>>({});
@@ -156,6 +163,30 @@ export default function WalletsPage() {
       setMigrateResult('마이그레이션 실패');
     } finally {
       setMigrateLoading(false);
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!transferSource || !transferTo || !transferAmount) return;
+    setTransferLoading(true);
+    setTransferResult(null);
+    try {
+      await api.post('/admin/wallets/transfer', {
+        fromWalletId: transferSource.id,
+        toAddress: transferTo,
+        amount: Number(transferAmount),
+        tokenSymbol: 'JOJU',
+      });
+      setTransferResult('송금 완료');
+      setTransferSource(null);
+      setTransferTo('');
+      setTransferAmount('');
+      const items = await fetchWallets();
+      if (items.length > 0) fetchBalances(items);
+    } catch {
+      setTransferResult('송금 실패');
+    } finally {
+      setTransferLoading(false);
     }
   };
 
@@ -265,8 +296,8 @@ export default function WalletsPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">지갑 관리</h1>
         <div className="flex items-center gap-3">
-          {(migrateResult || reconcileResult) && (
-            <span className="text-xs text-text-secondary">{reconcileResult || migrateResult}</span>
+          {(migrateResult || reconcileResult || transferResult) && (
+            <span className="text-xs text-text-secondary">{transferResult || reconcileResult || migrateResult}</span>
           )}
           <button
             onClick={handleReconcile}
@@ -296,6 +327,18 @@ export default function WalletsPage() {
         emptyMessage="등록된 지갑이 없습니다"
         actions={(row) => (
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                setTransferSource(row);
+                setTransferTo('');
+                setTransferAmount('');
+                setTransferResult(null);
+              }}
+              className="rounded-lg border border-violet-500/30 px-3 py-1 text-xs font-medium text-violet-400 transition-all duration-200 hover:bg-violet-500/10"
+              title="이 지갑에서 다른 주소로 온체인 송금"
+            >
+              송금
+            </button>
             <button
               onClick={() => handleSweep(row.id)}
               disabled={sweepLoading[row.id]}
@@ -353,6 +396,69 @@ export default function WalletsPage() {
               ? `지갑 ${modalTarget.address.slice(0, 8)}...을 잠그시겠습니까? 잠금 시 출금이 제한됩니다.`
               : `지갑 ${modalTarget.address.slice(0, 8)}...의 잠금을 해제하시겠습니까?`}
           </p>
+        )}
+      </Modal>
+
+      {/* Transfer Modal */}
+      <Modal
+        open={!!transferSource}
+        onClose={() => setTransferSource(null)}
+        title="온체인 송금"
+        actions={
+          <>
+            <button
+              onClick={() => setTransferSource(null)}
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5"
+            >
+              취소
+            </button>
+            <button
+              onClick={handleTransfer}
+              disabled={transferLoading || !transferTo || !transferAmount}
+              className="rounded-lg bg-violet-600/80 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-violet-600 hover:shadow-lg hover:shadow-violet-500/20 disabled:opacity-60"
+            >
+              {transferLoading ? '처리 중...' : '송금 실행'}
+            </button>
+          </>
+        }
+      >
+        {transferSource && (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-secondary">출발 지갑</label>
+              <p className="font-mono text-sm text-text">
+                {transferSource.user?.name && <span className="mr-2 font-sans text-text-secondary">({transferSource.user.name})</span>}
+                {transferSource.address}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-secondary">받는 주소 (TRON)</label>
+              <input
+                type="text"
+                value={transferTo}
+                onChange={(e) => setTransferTo(e.target.value)}
+                placeholder="T..."
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-sm text-text placeholder-text-secondary/50 outline-none focus:border-violet-500/50"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-secondary">수량 (JOJU)</label>
+              <input
+                type="number"
+                value={transferAmount}
+                onChange={(e) => setTransferAmount(e.target.value)}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text placeholder-text-secondary/50 outline-none focus:border-violet-500/50"
+              />
+            </div>
+            {transferResult && (
+              <p className={`text-sm font-medium ${transferResult.includes('완료') ? 'text-emerald-400' : 'text-red-400'}`}>
+                {transferResult}
+              </p>
+            )}
+          </div>
         )}
       </Modal>
     </div>

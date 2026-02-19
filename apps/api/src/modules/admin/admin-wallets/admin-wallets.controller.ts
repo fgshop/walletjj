@@ -5,6 +5,7 @@ import { AdminAuthGuard } from '../admin-auth/guards/admin-auth.guard';
 import { AdminRolesGuard } from '../admin-auth/guards/admin-roles.guard';
 import { AdminRoles } from '../decorators/admin-roles.decorator';
 import { LockWalletDto } from '../dto/lock-wallet.dto';
+import { AdminTransferDto } from '../dto/admin-transfer.dto';
 import { AdminQueryDto } from '../dto/admin-query.dto';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentAdmin } from '../decorators/current-admin.decorator';
@@ -50,6 +51,24 @@ export class AdminWalletsController {
     @Req() req: Request,
   ) {
     return this.adminWalletsService.reconcileBalances(adminId, req.ip || '');
+  }
+
+  @Post('transfer')
+  @AdminRoles('SUPER_ADMIN' as any)
+  @ApiOperation({ summary: 'Admin-initiated on-chain transfer between wallets' })
+  async adminTransfer(
+    @CurrentAdmin('id') adminId: string,
+    @Body() dto: AdminTransferDto,
+    @Req() req: Request,
+  ) {
+    return this.adminWalletsService.adminTransfer(
+      adminId,
+      dto.fromWalletId,
+      dto.toAddress,
+      dto.amount,
+      dto.tokenSymbol || 'JOJU',
+      req.ip || '',
+    );
   }
 
   @Post(':id/sweep')
