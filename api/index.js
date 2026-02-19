@@ -4,10 +4,16 @@ const { ExpressAdapter } = require('@nestjs/platform-express');
 const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
 const express = require('express');
 
+// Force Vercel bundler to trace ESM-only packages used via dynamic import() in crypto.service.
+// Without these hints, @vercel/nft cannot detect them (they use Function('s','return import(s)') trick).
+import('@scure/bip32').catch(() => {});
+import('@scure/bip39').catch(() => {});
+import('@scure/bip39/wordlists/english.js').catch(() => {});
+
 // Suppress Redis ECONNREFUSED crashes in serverless (no Redis available)
 process.on('unhandledRejection', (reason) => {
   if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
-    return; // swallow Redis connection errors
+    return;
   }
   console.error('Unhandled Rejection:', reason);
 });
@@ -54,7 +60,6 @@ module.exports = async (req, res) => {
     server(req, res);
   } catch (error) {
     console.error('Serverless bootstrap error:', error);
-    // Reset cache so next invocation retries
     cachedServer = null;
     res.status(500).json({
       statusCode: 500,
