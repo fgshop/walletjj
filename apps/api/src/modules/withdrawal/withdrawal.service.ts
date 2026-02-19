@@ -50,7 +50,7 @@ export class WithdrawalService {
       throw new BadRequestException('Cannot withdraw to your own wallet address');
     }
 
-    // 4. Check balance
+    // 4. Check on-chain balance minus pending withdrawals
     const tokenSymbol = dto.tokenSymbol || 'JOJU';
     let currentBalance: string;
     if (dto.tokenAddress) {
@@ -62,8 +62,26 @@ export class WithdrawalService {
       currentBalance = await this.tronService.getBalance(wallet.address);
     }
 
-    if (BigInt(currentBalance) < BigInt(dto.amount)) {
-      throw new BadRequestException('Insufficient balance');
+    const pendingWithdrawals = await this.prisma.withdrawalRequest.findMany({
+      where: {
+        userId,
+        tokenSymbol,
+        status: { in: ['PENDING_24H', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING'] },
+      },
+      select: { amount: true },
+    });
+    const pendingSum = pendingWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+
+    const onChain = Number(currentBalance);
+    const requestedAmount = Number(dto.amount);
+    const availableForWithdrawal = onChain - pendingSum;
+
+    if (availableForWithdrawal < requestedAmount) {
+      throw new BadRequestException(
+        'Insufficient on-chain balance for withdrawal. ' +
+          'Note: balances received via internal transfer cannot be withdrawn externally. ' +
+          `Available on-chain: ${availableForWithdrawal} ${tokenSymbol}`,
+      );
     }
 
     // 5. Check if this is the user's first external withdrawal

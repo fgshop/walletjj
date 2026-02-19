@@ -15,11 +15,12 @@ export default function SendPage() {
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [balance, setBalance] = useState<number>(0);
+  const [onchainBalance, setOnchainBalance] = useState<number>(0);
   const [pendingAmount, setPendingAmount] = useState<number>(0);
+  const [internalNet, setInternalNet] = useState<number>(0);
   const [balanceLoading, setBalanceLoading] = useState(true);
 
-  const availableBalance = Math.max(0, balance - pendingAmount);
+  const effectiveBalance = Math.max(0, onchainBalance + internalNet - pendingAmount);
 
   useEffect(() => {
     async function fetchBalance() {
@@ -28,11 +29,13 @@ export default function SendPage() {
         const balData = data.data ?? {};
         const balances = balData.balances ?? [];
         const pending = balData.pendingBySymbol ?? {};
+        const internalNetMap = balData.internalNetBySymbol ?? {};
         const joju = balances.find((b: { symbol: string }) => b.symbol === 'JOJU');
-        setBalance(Number(joju?.balance ?? 0));
+        setOnchainBalance(Number(joju?.balance ?? 0));
         setPendingAmount(pending['JOJU'] ?? 0);
+        setInternalNet(internalNetMap['JOJU'] ?? 0);
       } catch {
-        setBalance(0);
+        setOnchainBalance(0);
       } finally {
         setBalanceLoading(false);
       }
@@ -46,7 +49,7 @@ export default function SendPage() {
   }, []);
 
   const setPercentage = (pct: number) => {
-    const val = availableBalance * (pct / 100);
+    const val = effectiveBalance * (pct / 100);
     setAmount(val > 0 ? val.toString() : '');
   };
 
@@ -63,8 +66,8 @@ export default function SendPage() {
       setError('올바른 금액을 입력해주세요.');
       return;
     }
-    if (Number(amount) > availableBalance) {
-      setError(pendingAmount > 0 ? `출금 가능 금액을 초과했습니다. (출금 대기: ${pendingAmount.toLocaleString()} JOJU)` : '잔액이 부족합니다.');
+    if (Number(amount) > effectiveBalance) {
+      setError('유효 잔액이 부족합니다.');
       return;
     }
     setShowConfirm(true);
@@ -75,7 +78,7 @@ export default function SendPage() {
     setLoading(true);
     try {
       await api.post('/transactions/internal-transfer', {
-        toIdentifier: recipient,
+        recipient,
         amount,
         tokenSymbol: 'JOJU',
         memo: memo || undefined,
@@ -95,32 +98,32 @@ export default function SendPage() {
 
   return (
     <div className="mx-auto max-w-lg pb-20 sm:pb-0">
-      <h1 className="text-xl font-bold">송금</h1>
-      <p className="mb-6 text-sm text-text-secondary">다른 회원에게 JOJU를 보내세요</p>
+      <h1 className="text-xl font-bold text-white">송금</h1>
+      <p className="mb-6 text-sm text-gray-400">다른 회원에게 JOJU를 보내세요</p>
 
-      <form onSubmit={handleSubmit} className="rounded-2xl bg-surface p-6 shadow-sm">
+      <div className="glass-card-strong p-6">
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
+          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">{error}</div>
         )}
         {success && (
-          <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">{success}</div>
+          <div className="mb-4 rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-sm text-green-400">{success}</div>
         )}
 
-        <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-text">받는 사람</label>
+            <label className="mb-2 block text-sm font-medium text-gray-300">받는 사람</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
                 placeholder="이메일 또는 TRON 주소"
-                className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                className="input-dark min-w-0 flex-1 rounded-xl px-4 py-3 text-sm"
               />
               <button
                 type="button"
                 onClick={() => setShowScanner(true)}
-                className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-border transition hover:border-accent hover:text-accent"
+                className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-400 transition-all duration-300 hover:border-purple-500/30 hover:text-purple-400"
                 title="QR 스캔"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,21 +133,15 @@ export default function SendPage() {
             </div>
           </div>
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-sm font-medium text-text">금액 (JOJU)</label>
-              <span className="text-xs text-text-secondary">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-300">금액 (JOJU)</label>
+              <span className="text-xs text-gray-400">
                 {balanceLoading ? (
-                  <span className="inline-block h-3 w-16 animate-pulse rounded bg-border align-middle" />
-                ) : pendingAmount > 0 ? (
-                  <span>
-                    잔액: <span className="font-medium text-text">{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
-                    {' / '}
-                    <span className="font-semibold text-primary">가용: {availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
-                    <span className="text-text-secondary"> JOJU</span>
-                  </span>
+                  <span className="inline-block h-3 w-16 rounded shimmer align-middle" />
                 ) : (
                   <span>
-                    잔액: <span className="font-medium text-text">{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+                    유효 잔액: <span className="font-semibold text-purple-400">{effectiveBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                    <span className="text-gray-500"> JOJU</span>
                   </span>
                 )}
               </span>
@@ -156,7 +153,7 @@ export default function SendPage() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              className="input-dark w-full rounded-xl px-4 py-3 text-sm"
             />
             <div className="mt-2 flex gap-2">
               {[10, 15, 25, 50].map((pct) => (
@@ -164,7 +161,7 @@ export default function SendPage() {
                   key={pct}
                   type="button"
                   onClick={() => setPercentage(pct)}
-                  className="flex-1 rounded-md border border-border py-1.5 text-xs font-medium text-text-secondary transition hover:border-accent hover:text-accent"
+                  className="flex-1 rounded-lg border border-white/10 bg-white/5 py-1.5 text-xs font-medium text-gray-400 transition-all duration-300 hover:border-purple-500/30 hover:text-purple-400"
                 >
                   {pct}%
                 </button>
@@ -172,64 +169,64 @@ export default function SendPage() {
               <button
                 type="button"
                 onClick={() => setPercentage(100)}
-                className="flex-1 rounded-md border border-accent bg-accent/5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10"
+                className="flex-1 rounded-lg border border-purple-500/30 bg-purple-500/10 py-1.5 text-xs font-semibold text-purple-400 transition-all duration-300 hover:bg-purple-500/20"
               >
                 Max
               </button>
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-text">메모 (선택)</label>
+            <label className="mb-2 block text-sm font-medium text-gray-300">메모 (선택)</label>
             <input
               type="text"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="메모 입력"
-              className="w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              className="input-dark w-full rounded-xl px-4 py-3 text-sm"
             />
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-        >
-          {loading ? '처리 중...' : '송금하기'}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-gradient w-full rounded-xl py-3 text-sm font-semibold text-white"
+          >
+            {loading ? '처리 중...' : '송금하기'}
+          </button>
+        </form>
+      </div>
 
       {/* Confirmation modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl">
-            <h3 className="text-lg font-bold">송금 확인</h3>
-            <div className="mt-4 space-y-2 text-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm glass-card-strong p-6 shadow-2xl animate-fade-in">
+            <h3 className="text-lg font-bold text-white">송금 확인</h3>
+            <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-text-secondary">받는 사람</span>
-                <span className="font-medium">{recipient}</span>
+                <span className="text-gray-400">받는 사람</span>
+                <span className="font-medium text-white">{recipient}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-secondary">금액</span>
-                <span className="font-medium">{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+                <span className="text-gray-400">금액</span>
+                <span className="font-medium text-white">{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
               </div>
               {memo && (
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">메모</span>
-                  <span className="font-medium">{memo}</span>
+                  <span className="text-gray-400">메모</span>
+                  <span className="font-medium text-white">{memo}</span>
                 </div>
               )}
             </div>
             <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 rounded-lg border border-border py-2.5 text-sm font-medium transition hover:bg-surface-dim"
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-gray-300 transition-all duration-300 hover:bg-white/10"
               >
                 취소
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                className="btn-gradient flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
               >
                 확인
               </button>

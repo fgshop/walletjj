@@ -63,16 +63,16 @@ export default function DataTable<T extends Record<string, unknown>>({
     : data;
 
   return (
-    <div className="rounded-xl border border-border bg-surface">
+    <div className="glass-card rounded-xl overflow-hidden">
       {/* Search */}
       {onSearch && (
-        <div className="border-b border-border p-4">
+        <div className="border-b border-white/5 p-4">
           <input
             type="text"
             value={searchValue}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full max-w-sm rounded-lg border border-border bg-surface-dim px-4 py-2 text-sm text-text placeholder-text-secondary outline-none focus:border-primary-light focus:ring-1 focus:ring-primary-light"
+            className="w-full max-w-sm rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text placeholder-text-secondary/60 outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>
       )}
@@ -81,22 +81,22 @@ export default function DataTable<T extends Record<string, unknown>>({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-border bg-surface-dim">
+            <tr className="border-b border-white/5 bg-white/[0.02]">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 font-semibold text-text-secondary ${col.sortable ? 'cursor-pointer select-none hover:text-text' : ''}`}
+                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary/70 ${col.sortable ? 'cursor-pointer select-none hover:text-text transition-colors' : ''}`}
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
                   <span className="flex items-center gap-1">
                     {col.label}
                     {col.sortable && sortKey === col.key && (
-                      <span className="text-xs">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                      <span className="text-primary-light">{sortDir === 'asc' ? '▲' : '▼'}</span>
                     )}
                   </span>
                 </th>
               ))}
-              {actions && <th className="px-4 py-3 font-semibold text-text-secondary">작업</th>}
+              {actions && <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">작업</th>}
             </tr>
           </thead>
           <tbody>
@@ -117,7 +117,7 @@ export default function DataTable<T extends Record<string, unknown>>({
               </tr>
             ) : (
               sortedData.map((row, i) => (
-                <tr key={i} className="border-b border-border last:border-0 hover:bg-surface-dim/50 transition">
+                <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors duration-150">
                   {columns.map((col) => (
                     <td key={col.key} className="px-4 py-3 text-text">
                       {col.render ? col.render(row) : (row[col.key] as React.ReactNode)}
@@ -133,7 +133,7 @@ export default function DataTable<T extends Record<string, unknown>>({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-border px-4 py-3">
+        <div className="flex items-center justify-between border-t border-white/5 px-4 py-3">
           <p className="text-sm text-text-secondary">
             페이지 {page} / {totalPages}
           </p>
@@ -141,14 +141,14 @@ export default function DataTable<T extends Record<string, unknown>>({
             <button
               onClick={() => onPageChange?.(page - 1)}
               disabled={page <= 1}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition hover:bg-surface-dim disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5 hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
             >
               이전
             </button>
             <button
               onClick={() => onPageChange?.(page + 1)}
               disabled={page >= totalPages}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition hover:bg-surface-dim disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5 hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
             >
               다음
             </button>

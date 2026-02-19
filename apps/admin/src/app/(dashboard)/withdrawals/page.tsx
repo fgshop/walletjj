@@ -90,18 +90,18 @@ export default function WithdrawalsPage() {
     {
       key: 'user',
       label: '사용자',
-      render: (row) => row.user?.email || '-',
+      render: (row) => <span className="text-text">{row.user?.email || '-'}</span>,
     },
     {
       key: 'amount',
       label: '금액',
       sortable: true,
-      render: (row) => <span className="font-mono">{row.amount}</span>,
+      render: (row) => <span className="font-mono text-text">{row.amount}</span>,
     },
     {
       key: 'toAddress',
       label: '수신 주소',
-      render: (row) => <span className="font-mono text-xs">{row.toAddress.slice(0, 8)}...{row.toAddress.slice(-6)}</span>,
+      render: (row) => <span className="font-mono text-xs text-text-secondary">{row.toAddress.slice(0, 8)}...{row.toAddress.slice(-6)}</span>,
     },
     {
       key: 'status',
@@ -112,7 +112,7 @@ export default function WithdrawalsPage() {
       key: 'createdAt',
       label: '요청일',
       sortable: true,
-      render: (row) => new Date(row.createdAt).toLocaleString('ko-KR'),
+      render: (row) => <span className="text-text-secondary">{new Date(row.createdAt).toLocaleString('ko-KR')}</span>,
     },
   ];
 
@@ -126,10 +126,10 @@ export default function WithdrawalsPage() {
           <button
             key={s}
             onClick={() => { setStatusFilter(s); setPage(1); }}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
               statusFilter === s
-                ? 'bg-primary text-white'
-                : 'border border-border text-text-secondary hover:bg-surface-dim'
+                ? 'bg-gradient-to-r from-primary to-info text-white shadow-md shadow-primary/20'
+                : 'border border-white/10 text-text-secondary hover:bg-white/5 hover:text-text'
             }`}
           >
             {STATUS_LABELS[s]}
@@ -150,13 +150,13 @@ export default function WithdrawalsPage() {
             <div className="flex gap-1">
               <button
                 onClick={() => openReview(row, 'APPROVED')}
-                className="rounded-lg border border-success/30 px-3 py-1 text-xs font-medium text-success transition hover:bg-success/10"
+                className="rounded-lg border border-emerald-500/30 px-3 py-1 text-xs font-medium text-emerald-400 transition-all duration-200 hover:bg-emerald-500/10"
               >
                 승인
               </button>
               <button
                 onClick={() => openReview(row, 'REJECTED')}
-                className="rounded-lg border border-danger/30 px-3 py-1 text-xs font-medium text-danger transition hover:bg-danger/10"
+                className="rounded-lg border border-red-500/30 px-3 py-1 text-xs font-medium text-red-400 transition-all duration-200 hover:bg-red-500/10"
               >
                 거부
               </button>
@@ -173,15 +173,17 @@ export default function WithdrawalsPage() {
           <>
             <button
               onClick={() => setReviewTarget(null)}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-surface-dim"
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5"
             >
               취소
             </button>
             <button
               onClick={handleReview}
               disabled={actionLoading}
-              className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition disabled:opacity-60 ${
-                reviewAction === 'APPROVED' ? 'bg-success hover:bg-success/80' : 'bg-danger hover:bg-danger/80'
+              className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200 disabled:opacity-60 ${
+                reviewAction === 'APPROVED'
+                  ? 'bg-emerald-600/80 hover:bg-emerald-600 hover:shadow-lg hover:shadow-emerald-500/20'
+                  : 'bg-red-600/80 hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/20'
               }`}
             >
               {actionLoading ? '처리 중...' : reviewAction === 'APPROVED' ? '승인' : '거부'}
@@ -192,11 +194,11 @@ export default function WithdrawalsPage() {
         {reviewTarget && (
           <div className="space-y-3">
             <p>
-              <span className="font-medium">{reviewTarget.user?.email}</span>의 출금 요청을{' '}
+              <span className="font-medium text-text">{reviewTarget.user?.email}</span>의 출금 요청을{' '}
               {reviewAction === 'APPROVED' ? '승인' : '거부'}하시겠습니까?
             </p>
             <p className="font-mono text-text">금액: {reviewTarget.amount}</p>
-            <p className="font-mono text-xs text-text">주소: {reviewTarget.toAddress}</p>
+            <p className="font-mono text-xs text-text-secondary">주소: {reviewTarget.toAddress}</p>
             {reviewAction === 'REJECTED' && (
               <div>
                 <label className="mb-1 block text-xs font-medium text-text">거부 사유</label>
@@ -205,7 +207,7 @@ export default function WithdrawalsPage() {
                   value={reviewReason}
                   onChange={(e) => setReviewReason(e.target.value)}
                   placeholder="거부 사유를 입력하세요"
-                  className="w-full rounded-lg border border-border bg-surface-dim px-3 py-2 text-sm text-text outline-none focus:border-primary-light"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             )}

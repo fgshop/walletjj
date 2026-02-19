@@ -10,9 +10,9 @@ interface StatsCardProps {
 
 export default function StatsCard({ icon, label, value, change, changeType = 'neutral' }: StatsCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-6 transition hover:shadow-md">
+    <div className="glass-card rounded-xl p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20">
       <div className="flex items-center justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary-light">
           {icon}
         </div>
         {change && (

@@ -52,9 +52,9 @@ export default function AuditLogsPage() {
       label: '대상 ID',
       render: (row) =>
         row.resourceId ? (
-          <span className="font-mono text-xs">{row.resourceId.slice(0, 8)}...</span>
+          <span className="font-mono text-xs text-text-secondary">{row.resourceId.slice(0, 8)}...</span>
         ) : (
-          '-'
+          <span className="text-text-secondary/50">-</span>
         ),
     },
     {
@@ -69,13 +69,13 @@ export default function AuditLogsPage() {
     {
       key: 'ipAddress',
       label: 'IP',
-      render: (row) => <span className="font-mono text-xs">{row.ipAddress || '-'}</span>,
+      render: (row) => <span className="font-mono text-xs text-text-secondary">{row.ipAddress || '-'}</span>,
     },
     {
       key: 'createdAt',
       label: '날짜',
       sortable: true,
-      render: (row) => new Date(row.createdAt).toLocaleString('ko-KR'),
+      render: (row) => <span className="text-text-secondary">{new Date(row.createdAt).toLocaleString('ko-KR')}</span>,
     },
   ];
 

@@ -20,6 +20,9 @@ import { AdminDashboardService } from './admin-dashboard/admin-dashboard.service
 
 import { AdminAuditController } from './admin-audit/admin-audit.controller';
 
+import { AdminTransactionsController } from './admin-transactions/admin-transactions.controller';
+import { AdminTransactionsService } from './admin-transactions/admin-transactions.service';
+
 import { AdminTokensController } from './admin-tokens/admin-tokens.controller';
 import { AdminTokensService } from './admin-tokens/admin-tokens.service';
 
@@ -42,6 +45,7 @@ import { QueueModule } from '../queue/queue.module';
     AdminWithdrawalsController,
     AdminDashboardController,
     AdminAuditController,
+    AdminTransactionsController,
     AdminTokensController,
   ],
   providers: [
@@ -51,6 +55,7 @@ import { QueueModule } from '../queue/queue.module';
     AdminWalletsService,
     AdminWithdrawalsService,
     AdminDashboardService,
+    AdminTransactionsService,
     AdminTokensService,
   ],
 })

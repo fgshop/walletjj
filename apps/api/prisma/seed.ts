@@ -12,8 +12,8 @@ async function main() {
     where: { email: adminEmail },
   });
 
+  const passwordHash = await bcrypt.hash('Admin1234!', 10);
   if (!existingAdmin) {
-    const passwordHash = await bcrypt.hash('admin123!', 10);
     const admin = await prisma.adminUser.create({
       data: {
         email: adminEmail,
@@ -25,7 +25,11 @@ async function main() {
     });
     console.log(`SUPER_ADMIN created: ${admin.email}`);
   } else {
-    console.log(`SUPER_ADMIN already exists: ${adminEmail}`);
+    await prisma.adminUser.update({
+      where: { email: adminEmail },
+      data: { passwordHash },
+    });
+    console.log(`SUPER_ADMIN password updated: ${adminEmail}`);
   }
 
   // 2. Create default SupportedToken (USDT TRC-20 on Shasta testnet)

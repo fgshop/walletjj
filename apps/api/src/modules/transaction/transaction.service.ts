@@ -6,7 +6,9 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
 import { TronService } from '../wallet/tron/tron.service';
+import { WalletService } from '../wallet/wallet.service';
 import { NotificationService } from '../notification/notification.service';
 import { InternalTransferDto } from './dto/internal-transfer.dto';
 import { TransactionQueryDto } from './dto/transaction-query.dto';
@@ -19,7 +21,9 @@ export class TransactionService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly tronService: TronService,
+    private readonly walletService: WalletService,
     private readonly notificationService: NotificationService,
   ) {}
 
@@ -68,68 +72,98 @@ export class TransactionService {
     }
 
     // 4. Validate amount
-    const amount = BigInt(dto.amount);
-    if (amount <= 0n) {
-      throw new BadRequestException('Amount must be positive');
+    const amount = Number(dto.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a positive number');
     }
 
-    // 5. Check on-chain balance
     const tokenSymbol = dto.tokenSymbol || 'JOJU';
-    let currentBalance: string;
-    if (dto.tokenAddress) {
-      currentBalance = await this.tronService.getTrc20Balance(
-        senderWallet.address,
-        dto.tokenAddress,
+
+    // 5. Acquire distributed lock to prevent concurrent transfers
+    const lockKey = `transfer-lock:${userId}`;
+    const locked = await this.redis.get(lockKey);
+    if (locked) {
+      throw new BadRequestException('Transfer in progress, please wait');
+    }
+    await this.redis.set(lockKey, '1', 10);
+
+    try {
+      // 6. Calculate effective balance
+      let onChainBalance: string;
+      if (dto.tokenAddress) {
+        onChainBalance = await this.tronService.getTrc20Balance(
+          senderWallet.address,
+          dto.tokenAddress,
+        );
+      } else {
+        onChainBalance = await this.tronService.getBalance(senderWallet.address);
+      }
+
+      const internalNet = await this.walletService.getInternalNetBySymbol(userId);
+      const netForSymbol = internalNet[tokenSymbol] ?? 0;
+
+      const pendingWithdrawals = await this.prisma.withdrawalRequest.findMany({
+        where: {
+          userId,
+          tokenSymbol,
+          status: { in: ['PENDING_24H', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING'] },
+        },
+        select: { amount: true },
+      });
+      const pendingSum = pendingWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+
+      const effectiveBalance = Number(onChainBalance) + netForSymbol - pendingSum;
+
+      if (effectiveBalance < amount) {
+        throw new BadRequestException(
+          `Insufficient balance. Available: ${effectiveBalance} ${tokenSymbol}`,
+        );
+      }
+
+      // 7. Create transaction record (off-chain ledger for custodial)
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          type: TxType.INTERNAL,
+          status: TxStatus.CONFIRMED,
+          fromUserId: userId,
+          toUserId: recipientWallet.user.id,
+          fromAddress: senderWallet.address,
+          toAddress: recipientWallet.address,
+          amount: dto.amount,
+          tokenAddress: dto.tokenAddress ?? null,
+          tokenSymbol,
+          tokenDecimals: dto.tokenAddress ? 6 : 6,
+          memo: dto.memo ?? null,
+          confirmedAt: new Date(),
+        },
+      });
+
+      // 8. Send notifications to both parties
+      await Promise.all([
+        this.notificationService.create(
+          userId,
+          'SEND_COMPLETE',
+          'Transfer Sent',
+          `You sent ${dto.amount} ${tokenSymbol} to ${recipientWallet.user.email}`,
+          { transactionId: transaction.id },
+        ),
+        this.notificationService.create(
+          recipientWallet.user.id,
+          'RECEIVE',
+          'Transfer Received',
+          `You received ${dto.amount} ${tokenSymbol} from ${senderWallet.user.email}`,
+          { transactionId: transaction.id },
+        ),
+      ]);
+
+      this.logger.log(
+        `Internal transfer: ${senderWallet.address} → ${recipientWallet.address} ${dto.amount} ${tokenSymbol}`,
       );
-    } else {
-      currentBalance = await this.tronService.getBalance(senderWallet.address);
+
+      return transaction;
+    } finally {
+      await this.redis.del(lockKey);
     }
-
-    if (BigInt(currentBalance) < amount) {
-      throw new BadRequestException('Insufficient balance');
-    }
-
-    // 6. Create transaction record (off-chain ledger for custodial)
-    const transaction = await this.prisma.transaction.create({
-      data: {
-        type: TxType.INTERNAL,
-        status: TxStatus.CONFIRMED,
-        fromUserId: userId,
-        toUserId: recipientWallet.user.id,
-        fromAddress: senderWallet.address,
-        toAddress: recipientWallet.address,
-        amount: dto.amount,
-        tokenAddress: dto.tokenAddress ?? null,
-        tokenSymbol,
-        tokenDecimals: dto.tokenAddress ? 6 : 6,
-        memo: dto.memo ?? null,
-        confirmedAt: new Date(),
-      },
-    });
-
-    // 7. Send notifications to both parties
-    await Promise.all([
-      this.notificationService.create(
-        userId,
-        'SEND_COMPLETE',
-        'Transfer Sent',
-        `You sent ${dto.amount} ${tokenSymbol} to ${recipientWallet.user.email}`,
-        { transactionId: transaction.id },
-      ),
-      this.notificationService.create(
-        recipientWallet.user.id,
-        'RECEIVE',
-        'Transfer Received',
-        `You received ${dto.amount} ${tokenSymbol} from ${senderWallet.user.email}`,
-        { transactionId: transaction.id },
-      ),
-    ]);
-
-    this.logger.log(
-      `Internal transfer: ${senderWallet.address} → ${recipientWallet.address} ${dto.amount} ${tokenSymbol}`,
-    );
-
-    return transaction;
   }
 
   async getTransactions(userId: string, query: TransactionQueryDto) {

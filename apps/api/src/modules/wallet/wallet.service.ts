@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { TxType, TxStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { CryptoService } from './crypto/crypto.service';
@@ -122,7 +123,35 @@ export class WalletService {
       pendingBySymbol[sym] = (pendingBySymbol[sym] ?? 0) + Number(w.amount);
     }
 
-    return { ...balances, pendingBySymbol };
+    // Net internal transfer amounts (received - sent) per symbol
+    const internalNetBySymbol = await this.getInternalNetBySymbol(userId);
+
+    return { ...balances, pendingBySymbol, internalNetBySymbol };
+  }
+
+  async getInternalNetBySymbol(userId: string): Promise<Record<string, number>> {
+    const internalTxs = await this.prisma.transaction.findMany({
+      where: {
+        type: TxType.INTERNAL,
+        status: TxStatus.CONFIRMED,
+        OR: [{ fromUserId: userId }, { toUserId: userId }],
+      },
+      select: { fromUserId: true, toUserId: true, amount: true, tokenSymbol: true },
+    });
+
+    const net: Record<string, number> = {};
+    for (const tx of internalTxs) {
+      const sym = tx.tokenSymbol;
+      const amt = Number(tx.amount);
+      if (tx.toUserId === userId) {
+        net[sym] = (net[sym] ?? 0) + amt;
+      }
+      if (tx.fromUserId === userId) {
+        net[sym] = (net[sym] ?? 0) - amt;
+      }
+    }
+
+    return net;
   }
 
   async ensureWallet(userId: string): Promise<void> {

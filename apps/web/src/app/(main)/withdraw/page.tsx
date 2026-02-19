@@ -14,11 +14,14 @@ export default function WithdrawPage() {
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [balance, setBalance] = useState<number>(0);
+  const [onchainBalance, setOnchainBalance] = useState<number>(0);
   const [pendingAmount, setPendingAmount] = useState<number>(0);
+  const [internalNet, setInternalNet] = useState<number>(0);
   const [balanceLoading, setBalanceLoading] = useState(true);
 
-  const availableBalance = Math.max(0, balance - pendingAmount);
+  // Withdrawal uses on-chain available balance only (internal net is NOT withdrawable)
+  const onchainAvailable = Math.max(0, onchainBalance - pendingAmount);
+  const hasInternalBalance = internalNet > 0;
 
   useEffect(() => {
     async function fetchBalance() {
@@ -27,11 +30,13 @@ export default function WithdrawPage() {
         const balData = data.data ?? {};
         const balances = balData.balances ?? [];
         const pending = balData.pendingBySymbol ?? {};
+        const internalNetMap = balData.internalNetBySymbol ?? {};
         const joju = balances.find((b: { symbol: string }) => b.symbol === 'JOJU');
-        setBalance(Number(joju?.balance ?? 0));
+        setOnchainBalance(Number(joju?.balance ?? 0));
         setPendingAmount(pending['JOJU'] ?? 0);
+        setInternalNet(internalNetMap['JOJU'] ?? 0);
       } catch {
-        setBalance(0);
+        setOnchainBalance(0);
       } finally {
         setBalanceLoading(false);
       }
@@ -45,7 +50,7 @@ export default function WithdrawPage() {
   }, []);
 
   const setPercentage = (pct: number) => {
-    const val = availableBalance * (pct / 100);
+    const val = onchainAvailable * (pct / 100);
     setAmount(val > 0 ? val.toString() : '');
   };
 
@@ -66,8 +71,8 @@ export default function WithdrawPage() {
       setError('올바른 금액을 입력해주세요.');
       return;
     }
-    if (Number(amount) > availableBalance) {
-      setError(pendingAmount > 0 ? `출금 가능 금액을 초과했습니다. (출금 대기: ${pendingAmount.toLocaleString()} JOJU)` : '잔액이 부족합니다.');
+    if (Number(amount) > onchainAvailable) {
+      setError(pendingAmount > 0 ? `온체인 출금 가능 금액을 초과했습니다. (출금 대기: ${pendingAmount.toLocaleString()} JOJU)` : '온체인 잔액이 부족합니다.');
       return;
     }
     setShowConfirm(true);
@@ -96,44 +101,60 @@ export default function WithdrawPage() {
 
   return (
     <div className="mx-auto max-w-lg pb-20 sm:pb-0">
-      <h1 className="text-xl font-bold">출금</h1>
-      <p className="mb-6 text-sm text-text-secondary">외부 TRON 지갑으로 출금하세요</p>
+      <h1 className="text-xl font-bold text-white">출금</h1>
+      <p className="mb-6 text-sm text-gray-400">외부 TRON 지갑으로 출금하세요</p>
 
-      <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+      {/* Warning banner */}
+      <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
         <div className="flex items-start gap-2">
-          <svg className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
-          <div className="text-xs text-yellow-800">
+          <div className="text-xs text-amber-200">
             <p className="font-medium">출금 안내</p>
-            <p className="mt-1">출금 요청 후 24시간 대기 기간이 있으며, 관리자 승인 후 처리됩니다.</p>
+            <p className="mt-1 text-amber-300/80">출금 요청 후 24시간 대기 기간이 있으며, 관리자 승인 후 처리됩니다.</p>
           </div>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="rounded-2xl bg-surface p-6 shadow-sm">
+      {/* Internal balance info banner */}
+      {hasInternalBalance && (
+        <div className="mb-4 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
+          <div className="flex items-start gap-2">
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="text-xs text-blue-200">
+              <p className="font-medium">내부 수신 잔액 안내</p>
+              <p className="mt-1 text-blue-300/80">내부 수신 잔액은 외부 출금에 사용할 수 없습니다. 온체인 잔액만 출금 가능합니다.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="glass-card-strong p-6">
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
+          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">{error}</div>
         )}
         {success && (
-          <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">{success}</div>
+          <div className="mb-4 rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-sm text-green-400">{success}</div>
         )}
 
-        <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-text">TRON 주소</label>
+            <label className="mb-2 block text-sm font-medium text-gray-300">TRON 주소</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="T로 시작하는 TRON 주소"
-                className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 font-mono text-sm outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                className="input-dark min-w-0 flex-1 rounded-xl px-4 py-3 font-mono text-sm"
               />
               <button
                 type="button"
                 onClick={() => setShowScanner(true)}
-                className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-border transition hover:border-accent hover:text-accent"
+                className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-400 transition-all duration-300 hover:border-purple-500/30 hover:text-purple-400"
                 title="QR 스캔"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -143,21 +164,15 @@ export default function WithdrawPage() {
             </div>
           </div>
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-sm font-medium text-text">금액 (JOJU)</label>
-              <span className="text-xs text-text-secondary">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-300">금액 (JOJU)</label>
+              <span className="text-xs text-gray-400">
                 {balanceLoading ? (
-                  <span className="inline-block h-3 w-16 animate-pulse rounded bg-border align-middle" />
-                ) : pendingAmount > 0 ? (
-                  <span>
-                    잔액: <span className="font-medium text-text">{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
-                    {' / '}
-                    <span className="font-semibold text-primary">가용: {availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
-                    <span className="text-text-secondary"> JOJU</span>
-                  </span>
+                  <span className="inline-block h-3 w-16 rounded shimmer align-middle" />
                 ) : (
                   <span>
-                    잔액: <span className="font-medium text-text">{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+                    온체인 가용: <span className="font-semibold text-purple-400">{onchainAvailable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span>
+                    <span className="text-gray-500"> JOJU</span>
                   </span>
                 )}
               </span>
@@ -169,7 +184,7 @@ export default function WithdrawPage() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              className="input-dark w-full rounded-xl px-4 py-3 text-sm"
             />
             <div className="mt-2 flex gap-2">
               {[10, 15, 25, 50].map((pct) => (
@@ -177,7 +192,7 @@ export default function WithdrawPage() {
                   key={pct}
                   type="button"
                   onClick={() => setPercentage(pct)}
-                  className="flex-1 rounded-md border border-border py-1.5 text-xs font-medium text-text-secondary transition hover:border-accent hover:text-accent"
+                  className="flex-1 rounded-lg border border-white/10 bg-white/5 py-1.5 text-xs font-medium text-gray-400 transition-all duration-300 hover:border-purple-500/30 hover:text-purple-400"
                 >
                   {pct}%
                 </button>
@@ -185,51 +200,51 @@ export default function WithdrawPage() {
               <button
                 type="button"
                 onClick={() => setPercentage(100)}
-                className="flex-1 rounded-md border border-accent bg-accent/5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10"
+                className="flex-1 rounded-lg border border-purple-500/30 bg-purple-500/10 py-1.5 text-xs font-semibold text-purple-400 transition-all duration-300 hover:bg-purple-500/20"
               >
                 Max
               </button>
             </div>
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 w-full rounded-lg bg-accent-light py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-        >
-          {loading ? '처리 중...' : '출금 요청'}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-gradient w-full rounded-xl py-3 text-sm font-semibold text-white"
+          >
+            {loading ? '처리 중...' : '출금 요청'}
+          </button>
+        </form>
+      </div>
 
       {/* Confirmation modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl">
-            <h3 className="text-lg font-bold">출금 확인</h3>
-            <div className="mt-4 space-y-2 text-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm glass-card-strong p-6 shadow-2xl animate-fade-in">
+            <h3 className="text-lg font-bold text-white">출금 확인</h3>
+            <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-text-secondary">받는 주소</span>
-                <span className="max-w-[200px] truncate font-mono text-xs font-medium">{address}</span>
+                <span className="text-gray-400">받는 주소</span>
+                <span className="max-w-[200px] truncate font-mono text-xs font-medium text-white">{address}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-secondary">금액</span>
-                <span className="font-medium">{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
+                <span className="text-gray-400">금액</span>
+                <span className="font-medium text-white">{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} JOJU</span>
               </div>
             </div>
-            <p className="mt-3 text-xs text-text-secondary">
+            <p className="mt-3 text-xs text-gray-400">
               출금 요청 후 24시간 대기 및 관리자 승인이 필요합니다.
             </p>
             <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 rounded-lg border border-border py-2.5 text-sm font-medium transition hover:bg-surface-dim"
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-gray-300 transition-all duration-300 hover:bg-white/10"
               >
                 취소
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 rounded-lg bg-accent-light py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                className="btn-gradient flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
               >
                 확인
               </button>

@@ -29,14 +29,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-[#06060f]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-500 border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-surface-dim">
+    <div className="min-h-screen bg-premium">
       <Navbar />
       <div className="mx-auto flex max-w-7xl gap-0 sm:gap-6 px-0 sm:px-6 py-0 sm:py-6">
         {/* Desktop sidebar */}
@@ -48,10 +48,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <a
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+                  className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-300 ${
                     active
-                      ? 'bg-primary text-white'
-                      : 'text-text-secondary hover:bg-surface hover:text-text'
+                      ? 'bg-gradient-to-r from-purple-600/20 to-blue-600/20 text-white border border-purple-500/20'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -65,11 +65,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </aside>
 
         {/* Content */}
-        <main className="min-w-0 flex-1 p-4 sm:p-0">{children}</main>
+        <main className="min-w-0 flex-1 p-4 sm:p-0 animate-fade-in">{children}</main>
       </div>
 
-      {/* Mobile bottom nav — show 5 core items, notifications via top Navbar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface sm:hidden">
+      {/* Mobile bottom nav */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#06060f]/90 backdrop-blur-xl sm:hidden">
         <div className="flex items-center justify-around py-2">
           {navItems.filter(i => i.href !== '/notifications').map((item) => {
             const active = pathname === item.href;
@@ -77,8 +77,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               <a
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] ${
-                  active ? 'text-primary font-semibold' : 'text-text-secondary'
+                className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] transition-all duration-300 ${
+                  active ? 'text-purple-400 font-semibold' : 'text-gray-500'
                 }`}
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

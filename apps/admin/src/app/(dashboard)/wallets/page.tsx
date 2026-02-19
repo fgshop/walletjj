@@ -63,12 +63,12 @@ export default function WalletsPage() {
     {
       key: 'address',
       label: '주소',
-      render: (row) => <span className="font-mono text-xs">{row.address.slice(0, 8)}...{row.address.slice(-6)}</span>,
+      render: (row) => <span className="font-mono text-xs text-text-secondary">{row.address.slice(0, 8)}...{row.address.slice(-6)}</span>,
     },
     {
       key: 'user',
       label: '사용자',
-      render: (row) => row.user?.email || '-',
+      render: (row) => <span className="text-text">{row.user?.email || '-'}</span>,
     },
     {
       key: 'isLocked',
@@ -79,7 +79,7 @@ export default function WalletsPage() {
       key: 'createdAt',
       label: '생성일',
       sortable: true,
-      render: (row) => new Date(row.createdAt).toLocaleDateString('ko-KR'),
+      render: (row) => <span className="text-text-secondary">{new Date(row.createdAt).toLocaleDateString('ko-KR')}</span>,
     },
   ];
 
@@ -102,10 +102,10 @@ export default function WalletsPage() {
               setModalTarget(row);
               setModalAction(row.isLocked ? 'unlock' : 'lock');
             }}
-            className={`rounded-lg border px-3 py-1 text-xs font-medium transition ${
+            className={`rounded-lg border px-3 py-1 text-xs font-medium transition-all duration-200 ${
               row.isLocked
-                ? 'border-success/30 text-success hover:bg-success/10'
-                : 'border-danger/30 text-danger hover:bg-danger/10'
+                ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
+                : 'border-red-500/30 text-red-400 hover:bg-red-500/10'
             }`}
           >
             {row.isLocked ? '잠금 해제' : '잠금'}
@@ -121,15 +121,17 @@ export default function WalletsPage() {
           <>
             <button
               onClick={() => setModalTarget(null)}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-surface-dim"
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-text-secondary transition-all duration-200 hover:bg-white/5"
             >
               취소
             </button>
             <button
               onClick={handleAction}
               disabled={actionLoading}
-              className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition disabled:opacity-60 ${
-                modalAction === 'lock' ? 'bg-danger hover:bg-danger/80' : 'bg-success hover:bg-success/80'
+              className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200 disabled:opacity-60 ${
+                modalAction === 'lock'
+                  ? 'bg-red-600/80 hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/20'
+                  : 'bg-emerald-600/80 hover:bg-emerald-600 hover:shadow-lg hover:shadow-emerald-500/20'
               }`}
             >
               {actionLoading ? '처리 중...' : modalAction === 'lock' ? '잠금' : '해제'}

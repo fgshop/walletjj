@@ -61,16 +61,16 @@ export default function UsersPage() {
       label: '지갑 주소',
       render: (row) =>
         row.wallet?.address ? (
-          <span className="font-mono text-xs">{row.wallet.address.slice(0, 8)}...{row.wallet.address.slice(-6)}</span>
+          <span className="font-mono text-xs text-text-secondary">{row.wallet.address.slice(0, 8)}...{row.wallet.address.slice(-6)}</span>
         ) : (
-          <span className="text-text-secondary">-</span>
+          <span className="text-text-secondary/50">-</span>
         ),
     },
     {
       key: 'createdAt',
       label: '가입일',
       sortable: true,
-      render: (row) => new Date(row.createdAt).toLocaleDateString('ko-KR'),
+      render: (row) => <span className="text-text-secondary">{new Date(row.createdAt).toLocaleDateString('ko-KR')}</span>,
     },
   ];
 
@@ -90,7 +90,7 @@ export default function UsersPage() {
         actions={(row) => (
           <Link
             href={`/users/${row.id}`}
-            className="rounded-lg border border-border px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/10"
+            className="rounded-lg border border-white/10 px-3 py-1 text-xs font-medium text-primary-light transition-all duration-200 hover:bg-primary/10 hover:border-primary/30"
           >
             상세
           </Link>

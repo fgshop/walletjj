@@ -21,25 +21,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-surface-dim">
         <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-surface-dim">
       <Sidebar />
       <div className="lg:ml-64">
         {/* Header */}
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-surface/80 px-6 backdrop-blur">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/5 bg-surface-dim/80 px-6 backdrop-blur-xl">
           <div className="lg:hidden w-10" />
           <h2 className="text-sm font-medium text-text-secondary hidden lg:block">관리자 대시보드</h2>
           <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-text">{adminName}</span>
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary to-info flex items-center justify-center text-[10px] font-bold text-white">
+                {adminName?.charAt(0)?.toUpperCase() || 'A'}
+              </div>
+              <span className="text-sm font-medium text-text">{adminName}</span>
+            </div>
             <button
               onClick={adminLogout}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-danger/10 hover:text-danger hover:border-danger/30"
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-text-secondary transition-all duration-200 hover:bg-danger/10 hover:text-danger hover:border-danger/30"
             >
               로그아웃
             </button>

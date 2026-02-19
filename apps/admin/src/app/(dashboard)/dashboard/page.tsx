@@ -4,11 +4,18 @@ import { useEffect, useState } from 'react';
 import api from '../../../lib/api';
 import StatsCard from '../../../components/StatsCard';
 
+interface InternalTransferStats {
+  total: number;
+  today: number;
+  totalAmount: string;
+}
+
 interface DashboardStats {
   totalUsers: number;
   activeWallets: number;
   pendingWithdrawals: number;
   todayTransactions: number;
+  internalTransfers?: InternalTransferStats;
 }
 
 export default function DashboardPage() {
@@ -34,7 +41,7 @@ export default function DashboardPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-bold text-text">대시보드</h1>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatsCard
           icon={<UsersIcon />}
           label="전체 사용자"
@@ -55,6 +62,17 @@ export default function DashboardPage() {
           icon={<TxIcon />}
           label="오늘 거래"
           value={stats?.todayTransactions?.toLocaleString() ?? '0'}
+        />
+        <StatsCard
+          icon={<InternalTxIcon />}
+          label="오늘 내부 송금"
+          value={stats?.internalTransfers?.today?.toLocaleString() ?? '0'}
+        />
+        <StatsCard
+          icon={<InternalTxIcon />}
+          label="내부 송금 총액"
+          value={`${Number(stats?.internalTransfers?.totalAmount ?? 0).toLocaleString()} JOJU`}
+          change={stats?.internalTransfers?.total ? `총 ${stats.internalTransfers.total.toLocaleString()}건` : undefined}
         />
       </div>
     </div>
@@ -89,6 +107,14 @@ function TxIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+    </svg>
+  );
+}
+
+function InternalTxIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v7.5a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-7.5a2.25 2.25 0 00-2.25-2.25h-.75m0-3l-3-3m0 0l-3 3m3-3v11.25m6-2.25h.75a2.25 2.25 0 012.25 2.25v7.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25v-.75" />
     </svg>
   );
 }

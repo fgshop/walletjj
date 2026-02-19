@@ -59,7 +59,7 @@ export default function UserDetailPage() {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
         <p className="text-text-secondary">사용자를 찾을 수 없습니다</p>
-        <button onClick={() => router.back()} className="text-sm text-primary hover:underline">
+        <button onClick={() => router.back()} className="text-sm text-primary-light hover:underline">
           돌아가기
         </button>
       </div>
@@ -68,7 +68,7 @@ export default function UserDetailPage() {
 
   return (
     <div>
-      <button onClick={() => router.back()} className="mb-4 text-sm text-primary hover:underline">
+      <button onClick={() => router.back()} className="mb-4 text-sm text-primary-light hover:underline transition-colors">
         &larr; 사용자 목록
       </button>
 
@@ -76,7 +76,7 @@ export default function UserDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* User Info */}
-        <div className="rounded-xl border border-border bg-surface p-6">
+        <div className="glass-card rounded-xl p-6">
           <h2 className="mb-4 text-lg font-semibold text-text">기본 정보</h2>
           <dl className="space-y-3">
             <div className="flex justify-between">
@@ -101,7 +101,7 @@ export default function UserDetailPage() {
         </div>
 
         {/* Wallet Info */}
-        <div className="rounded-xl border border-border bg-surface p-6">
+        <div className="glass-card rounded-xl p-6">
           <h2 className="mb-4 text-lg font-semibold text-text">지갑 정보</h2>
           {user.wallet ? (
             <dl className="space-y-3">
@@ -123,28 +123,28 @@ export default function UserDetailPage() {
               </div>
             </dl>
           ) : (
-            <p className="text-sm text-text-secondary">지갑 없음</p>
+            <p className="text-sm text-text-secondary/50">지갑 없음</p>
           )}
         </div>
       </div>
 
       {/* Recent Transactions */}
       {user.transactions && user.transactions.length > 0 && (
-        <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+        <div className="mt-6 glass-card rounded-xl p-6">
           <h2 className="mb-4 text-lg font-semibold text-text">최근 거래</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="px-3 py-2 font-semibold text-text-secondary">유형</th>
-                  <th className="px-3 py-2 font-semibold text-text-secondary">금액</th>
-                  <th className="px-3 py-2 font-semibold text-text-secondary">상태</th>
-                  <th className="px-3 py-2 font-semibold text-text-secondary">날짜</th>
+                <tr className="border-b border-white/5">
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">유형</th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">금액</th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">상태</th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">날짜</th>
                 </tr>
               </thead>
               <tbody>
                 {user.transactions.map((tx) => (
-                  <tr key={tx.id} className="border-b border-border last:border-0">
+                  <tr key={tx.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors">
                     <td className="px-3 py-2 text-text">{tx.type}</td>
                     <td className="px-3 py-2 font-mono text-text">{tx.amount}</td>
                     <td className="px-3 py-2"><StatusBadge status={tx.status} /></td>
@@ -161,23 +161,23 @@ export default function UserDetailPage() {
 
       {/* Withdrawal History */}
       {user.withdrawals && user.withdrawals.length > 0 && (
-        <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+        <div className="mt-6 glass-card rounded-xl p-6">
           <h2 className="mb-4 text-lg font-semibold text-text">출금 내역</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="px-3 py-2 font-semibold text-text-secondary">금액</th>
-                  <th className="px-3 py-2 font-semibold text-text-secondary">수신 주소</th>
-                  <th className="px-3 py-2 font-semibold text-text-secondary">상태</th>
-                  <th className="px-3 py-2 font-semibold text-text-secondary">날짜</th>
+                <tr className="border-b border-white/5">
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">금액</th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">수신 주소</th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">상태</th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-secondary/70">날짜</th>
                 </tr>
               </thead>
               <tbody>
                 {user.withdrawals.map((w) => (
-                  <tr key={w.id} className="border-b border-border last:border-0">
+                  <tr key={w.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors">
                     <td className="px-3 py-2 font-mono text-text">{w.amount}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-text">
+                    <td className="px-3 py-2 font-mono text-xs text-text-secondary">
                       {w.toAddress.slice(0, 8)}...{w.toAddress.slice(-6)}
                     </td>
                     <td className="px-3 py-2"><StatusBadge status={w.status} /></td>
