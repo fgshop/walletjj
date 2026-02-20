@@ -600,6 +600,43 @@ export class AdminWalletsService {
     return { message: 'Transfer completed', txHash, fromAddress, toAddress, amount, tokenSymbol };
   }
 
+  async getHotWallet() {
+    const masterWallet = await this.prisma.masterWallet.findFirst({
+      where: { isActive: true },
+      select: { id: true, address: true, nextIndex: true, description: true, createdAt: true },
+    });
+    if (!masterWallet) return null;
+
+    let trxBalance = '0';
+    try {
+      const sun = Number(await this.tronService.getBalance(masterWallet.address));
+      trxBalance = (sun / 1_000_000).toString();
+    } catch {}
+
+    const tokens = await this.prisma.supportedToken.findMany({ where: { isActive: true } });
+    const tokenBalances: Array<{ symbol: string; balance: string; decimals: number }> = [
+      { symbol: 'JOJU', balance: trxBalance, decimals: 6 },
+    ];
+
+    for (const token of tokens) {
+      try {
+        const raw = await this.tronService.getTrc20Balance(masterWallet.address, token.contractAddress);
+        const normalized = token.decimals > 0
+          ? (Number(raw) / Math.pow(10, token.decimals)).toString()
+          : raw;
+        tokenBalances.push({ symbol: token.symbol, balance: normalized, decimals: token.decimals });
+      } catch {
+        tokenBalances.push({ symbol: token.symbol, balance: '0', decimals: token.decimals });
+      }
+    }
+
+    return {
+      ...masterWallet,
+      balances: tokenBalances,
+      userWalletCount: masterWallet.nextIndex,
+    };
+  }
+
   async getWalletBalance(walletId: string) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { id: walletId },

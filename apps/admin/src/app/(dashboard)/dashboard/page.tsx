@@ -18,9 +18,19 @@ interface DashboardStats {
   internalTransfers?: InternalTransferStats;
 }
 
+interface BalanceSummary {
+  onchainTotal: string;
+  offchainTotal: string;
+  hotWalletBalance: string;
+  hotWalletAddress: string | null;
+  walletCount: number;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [balances, setBalances] = useState<BalanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [balancesLoading, setBalancesLoading] = useState(true);
 
   useEffect(() => {
     api
@@ -28,6 +38,12 @@ export default function DashboardPage() {
       .then((res) => setStats(res.data.data || res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    api
+      .get('/admin/dashboard/balances')
+      .then((res) => setBalances(res.data.data || res.data))
+      .catch(() => {})
+      .finally(() => setBalancesLoading(false));
   }, []);
 
   if (loading) {
@@ -41,6 +57,46 @@ export default function DashboardPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-bold text-text">대시보드</h1>
+
+      {/* Balance Summary */}
+      <h2 className="mb-3 text-lg font-semibold text-text">잔액 현황</h2>
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatsCard
+          icon={<OnchainIcon />}
+          label="온체인 잔액 합계 (유저 지갑)"
+          value={
+            balancesLoading
+              ? '로딩...'
+              : `${Number(balances?.onchainTotal ?? 0).toLocaleString()} JOJU`
+          }
+          change={balances ? `${balances.walletCount}개 지갑` : undefined}
+        />
+        <StatsCard
+          icon={<OffchainIcon />}
+          label="오프체인 잔액 합계 (DB)"
+          value={
+            balancesLoading
+              ? '로딩...'
+              : `${Number(balances?.offchainTotal ?? 0).toLocaleString()} JOJU`
+          }
+          change={balances ? `${balances.walletCount}명 유저` : undefined}
+        />
+        <StatsCard
+          icon={<HotWalletIcon />}
+          label="Hot Wallet 잔액"
+          value={
+            balancesLoading
+              ? '로딩...'
+              : `${Number(balances?.hotWalletBalance ?? 0).toLocaleString()} JOJU`
+          }
+          change={balances?.hotWalletAddress
+            ? `${balances.hotWalletAddress.slice(0, 6)}...${balances.hotWalletAddress.slice(-4)}`
+            : '미설정'}
+        />
+      </div>
+
+      {/* General Stats */}
+      <h2 className="mb-3 text-lg font-semibold text-text">운영 현황</h2>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatsCard
           icon={<UsersIcon />}
@@ -115,6 +171,31 @@ function InternalTxIcon() {
   return (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v7.5a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-7.5a2.25 2.25 0 00-2.25-2.25h-.75m0-3l-3-3m0 0l-3 3m3-3v11.25m6-2.25h.75a2.25 2.25 0 012.25 2.25v7.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25v-.75" />
+    </svg>
+  );
+}
+
+function OnchainIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.556a4.5 4.5 0 00-6.364-6.364L4.5 8.318m12.246 3.682a3 3 0 00-4.681-3.268" />
+    </svg>
+  );
+}
+
+function OffchainIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+    </svg>
+  );
+}
+
+function HotWalletIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
     </svg>
   );
 }

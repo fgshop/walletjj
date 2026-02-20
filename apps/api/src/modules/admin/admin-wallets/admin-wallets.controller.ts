@@ -19,6 +19,13 @@ import { Request } from 'express';
 export class AdminWalletsController {
   constructor(private readonly adminWalletsService: AdminWalletsService) {}
 
+  @Get('hot-wallet')
+  @AdminRoles('OPERATOR' as any)
+  @ApiOperation({ summary: 'Get hot wallet (master wallet) info and balances' })
+  async getHotWallet() {
+    return this.adminWalletsService.getHotWallet();
+  }
+
   @Get()
   @AdminRoles('OPERATOR' as any)
   @ApiOperation({ summary: 'List all wallets' })

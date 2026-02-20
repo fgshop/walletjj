@@ -20,4 +20,11 @@ export class AdminDashboardController {
   async getStats() {
     return this.adminDashboardService.getStats();
   }
+
+  @Get('balances')
+  @AdminRoles('VIEWER' as any)
+  @ApiOperation({ summary: 'Get on-chain / off-chain balance summary' })
+  async getBalanceSummary() {
+    return this.adminDashboardService.getBalanceSummary();
+  }
 }
