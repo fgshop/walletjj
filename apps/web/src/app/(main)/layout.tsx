@@ -10,7 +10,7 @@ const navItems = [
   { href: '/receive', label: '입금', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' },
   { href: '/send', label: '송금', icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8' },
   { href: '/withdraw', label: '출금', icon: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1' },
-  { href: '/transactions', label: '거래내역', icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+  { href: '/more', label: '더보기', icon: 'M4 6h16M4 12h16M4 18h16' },
   { href: '/notifications', label: '알림', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
 ];
 
@@ -43,7 +43,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <aside className="hidden w-56 shrink-0 sm:block">
           <nav className="sticky top-22 space-y-1">
             {navItems.map((item) => {
-              const active = pathname === item.href;
+              const active = item.href === '/more'
+                ? pathname.startsWith('/more')
+                : pathname === item.href;
               return (
                 <a
                   key={item.href}
@@ -72,7 +74,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#06060f]/90 backdrop-blur-xl sm:hidden">
         <div className="flex items-center justify-around py-2">
           {navItems.filter(i => i.href !== '/notifications').map((item) => {
-            const active = pathname === item.href;
+            const active = item.href === '/more'
+              ? pathname.startsWith('/more')
+              : pathname === item.href;
             return (
               <a
                 key={item.href}

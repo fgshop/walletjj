@@ -298,9 +298,7 @@ export default function DashboardPage() {
             전체보기
           </a>
         </div>
-        <div className="glass-card p-4">
-          <TransactionList transactions={transactions} loading={txLoading} currentUserId={currentUserId} />
-        </div>
+        <TransactionList transactions={transactions} loading={txLoading} currentUserId={currentUserId} />
       </div>
 
       {/* Copied toast */}

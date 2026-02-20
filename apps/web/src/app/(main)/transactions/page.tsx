@@ -84,7 +84,7 @@ export default function TransactionsPage() {
         ))}
       </div>
 
-      <div className="glass-card p-4">
+      <div>
         <TransactionList transactions={transactions} loading={loading && page === 1} currentUserId={currentUserId} />
 
         {hasMore && !loading && transactions.length > 0 && (
