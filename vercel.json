@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "node -v && pnpm -v && pnpm turbo run build --filter=@joju/api... --output-logs=full",
+  "buildCommand": "echo '=== Step 1: Build types ===' && pnpm --filter @joju/types build && echo '=== Step 2: Build utils ===' && pnpm --filter @joju/utils build && echo '=== Step 3: Prisma generate ===' && cd apps/api && npx prisma generate && echo '=== Step 4: NestJS build ===' && npx nest build && echo '=== ALL DONE ==='",
   "functions": {
     "api/index.js": {
       "maxDuration": 60
