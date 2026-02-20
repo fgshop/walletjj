@@ -53,7 +53,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix('v1');
+  app.setGlobalPrefix('api/v1');
 
   app.enableCors({
     origin: [
@@ -82,11 +82,11 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.API_PORT || 4000;
   await app.listen(port);
   console.log(`JOJUWallet API running on http://localhost:${port}`);
-  console.log(`Swagger docs at http://localhost:${port}/docs`);
+  console.log(`Swagger docs at http://localhost:${port}/api/docs`);
 }
 bootstrap();
