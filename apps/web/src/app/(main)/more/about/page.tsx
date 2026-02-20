@@ -20,7 +20,7 @@ export default function AboutPage() {
       <div className="mb-5 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
         <div className="flex items-center justify-between px-4 py-3.5">
           <span className="text-sm text-gray-400">네트워크</span>
-          <span className="text-sm text-white">TRON (Shasta Testnet)</span>
+          <span className="text-sm text-white">TRON (Mainnet)</span>
         </div>
         <div className="flex items-center justify-between px-4 py-3.5">
           <span className="text-sm text-gray-400">지원 토큰</span>
