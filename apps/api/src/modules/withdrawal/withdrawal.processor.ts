@@ -61,7 +61,6 @@ export class WithdrawalProcessor extends WorkerHost {
   private async executeWithdrawal(withdrawalId: string) {
     const withdrawal = await this.prisma.withdrawalRequest.findUnique({
       where: { id: withdrawalId },
-      include: { user: { include: { wallet: true } } },
     });
 
     if (!withdrawal) {
@@ -76,16 +75,7 @@ export class WithdrawalProcessor extends WorkerHost {
       return;
     }
 
-    const userWallet = withdrawal.user?.wallet;
-    if (!userWallet) {
-      await this.prisma.withdrawalRequest.update({
-        where: { id: withdrawalId },
-        data: { status: WithdrawalStatus.FAILED, failReason: 'User wallet not found' },
-      });
-      return;
-    }
-
-    // Get Hot Wallet for top-up fallback
+    // All withdrawals are sent from the Hot Wallet (sweep architecture)
     const masterWallet = await this.prisma.masterWallet.findFirst({
       where: { isActive: true },
     });
@@ -97,71 +87,36 @@ export class WithdrawalProcessor extends WorkerHost {
       return;
     }
 
-    // Pre-check: ensure user's on-chain wallet has enough.
-    // If not, top up the deficit from Hot Wallet (recorded as SWEEP, not affecting off-chain balance).
+    // Pre-check: ensure Hot Wallet has sufficient balance
     try {
       const amountNeeded = Number(withdrawal.amount);
 
       if (!withdrawal.tokenAddress) {
-        // TRX (JOJU): check user's on-chain balance
-        const userBalanceSun = Number(await this.tronService.getBalance(userWallet.address));
-        const userBalance = userBalanceSun / 1_000_000;
+        // TRX (JOJU): check hot wallet balance
+        const hotBalanceSun = Number(await this.tronService.getBalance(masterWallet.address));
+        const hotBalance = hotBalanceSun / 1_000_000;
         // Need amount + 1 TRX reserve for gas
         const totalNeeded = amountNeeded + 1;
 
-        if (userBalance < totalNeeded) {
-          const deficitSun = Math.ceil((totalNeeded - userBalance) * 1_000_000);
-
-          // Check Hot Wallet can cover the deficit
-          const hotBalanceSun = Number(await this.tronService.getBalance(masterWallet.address));
-          if (hotBalanceSun < deficitSun + 1_000_000) {
-            throw new Error(
-              `Insufficient funds: user on-chain ${userBalance} JOJU, hot wallet ${hotBalanceSun / 1_000_000} JOJU, need ${totalNeeded} JOJU`,
-            );
-          }
-
-          const hotKey = this.cryptoService.decrypt(masterWallet.encryptedKey);
-          const topupTxHash = await this.tronService.sendTrx(hotKey, userWallet.address, deficitSun);
-          this.logger.log(`Topped up ${deficitSun / 1_000_000} JOJU to ${userWallet.address} for withdrawal (TX: ${topupTxHash})`);
-
-          // Record top-up as SWEEP (excluded from balance calc)
-          await this.prisma.transaction.create({
-            data: {
-              txHash: topupTxHash,
-              type: TxType.SWEEP,
-              status: TxStatus.CONFIRMED,
-              fromAddress: masterWallet.address,
-              toAddress: userWallet.address,
-              amount: (deficitSun / 1_000_000).toString(),
-              tokenSymbol: 'JOJU',
-              confirmedAt: new Date(),
-              memo: 'withdrawal-topup',
-            },
-          }).catch((err: any) => {
-            if (err?.code !== 'P2002') throw err; // skip duplicate
-          });
-
-          // Wait for top-up to confirm
-          await new Promise((r) => setTimeout(r, 5_000));
+        if (hotBalance < totalNeeded) {
+          throw new Error(
+            `Hot wallet insufficient: ${hotBalance} JOJU available, need ${totalNeeded} JOJU`,
+          );
         }
       } else {
-        // TRC-20: check user's token balance
-        const tokenBalance = await this.tronService.getTrc20Balance(userWallet.address, withdrawal.tokenAddress);
+        // TRC-20: check hot wallet token balance + TRX for gas
+        const tokenBalance = await this.tronService.getTrc20Balance(masterWallet.address, withdrawal.tokenAddress);
         if (Number(tokenBalance) < amountNeeded) {
           throw new Error(
-            `Insufficient ${withdrawal.tokenSymbol} in user wallet: ${tokenBalance} < ${amountNeeded}`,
+            `Hot wallet insufficient ${withdrawal.tokenSymbol}: ${tokenBalance} available, need ${amountNeeded}`,
           );
         }
 
-        // Ensure user has enough TRX for gas (15 TRX)
-        const userTrxSun = Number(await this.tronService.getBalance(userWallet.address));
-        const gasNeeded = 15_000_000;
-        if (userTrxSun < gasNeeded) {
-          const hotKey = this.cryptoService.decrypt(masterWallet.encryptedKey);
-          const needed = gasNeeded - userTrxSun;
-          await this.tronService.sendTrx(hotKey, userWallet.address, needed);
-          this.logger.log(`Sent ${needed} SUN gas to ${userWallet.address} for TRC-20 withdrawal`);
-          await new Promise((r) => setTimeout(r, 5_000));
+        const hotTrxSun = Number(await this.tronService.getBalance(masterWallet.address));
+        if (hotTrxSun < 15_000_000) {
+          throw new Error(
+            `Hot wallet insufficient TRX for gas: ${hotTrxSun / 1_000_000} TRX, need 15 TRX`,
+          );
         }
       }
     } catch (err) {
@@ -181,13 +136,13 @@ export class WithdrawalProcessor extends WorkerHost {
     });
 
     try {
-      // Send from user's own wallet (on-chain and off-chain both decrease → stay in sync)
-      const userKey = this.cryptoService.decrypt(userWallet.encryptedKey);
+      // Send from Hot Wallet (all funds are swept here)
+      const hotKey = this.cryptoService.decrypt(masterWallet.encryptedKey);
 
       let txHash: string;
       if (withdrawal.tokenAddress) {
         txHash = await this.tronService.sendTrc20(
-          userKey,
+          hotKey,
           withdrawal.toAddress,
           withdrawal.tokenAddress,
           withdrawal.amount,
@@ -195,20 +150,20 @@ export class WithdrawalProcessor extends WorkerHost {
       } else {
         const amountSun = Math.floor(Number(withdrawal.amount) * 1_000_000);
         txHash = await this.tronService.sendTrx(
-          userKey,
+          hotKey,
           withdrawal.toAddress,
           amountSun,
         );
       }
 
-      // Create transaction record
+      // Create transaction record (fromAddress = hot wallet)
       const transaction = await this.prisma.transaction.create({
         data: {
           txHash,
           type: TxType.EXTERNAL_SEND,
           status: TxStatus.CONFIRMED,
           fromUserId: withdrawal.userId,
-          fromAddress: userWallet.address,
+          fromAddress: masterWallet.address,
           toAddress: withdrawal.toAddress,
           amount: withdrawal.amount,
           tokenSymbol: withdrawal.tokenSymbol,
@@ -234,7 +189,7 @@ export class WithdrawalProcessor extends WorkerHost {
       );
 
       this.logger.log(
-        `Withdrawal ${withdrawalId} completed from user wallet ${userWallet.address}. TX: ${txHash}`,
+        `Withdrawal ${withdrawalId} completed from hot wallet ${masterWallet.address}. TX: ${txHash}`,
       );
     } catch (err) {
       const failReason =
