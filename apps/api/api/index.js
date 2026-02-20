@@ -1,26 +1,22 @@
-const express = require('express');
-const { NestFactory } = require('@nestjs/core');
-const { ExpressAdapter } = require('@nestjs/platform-express');
-const { ValidationPipe } = require('@nestjs/common');
-const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
-
-const server = express();
-let bootstrapPromise = null;
+let app;
+let initError;
 
 async function bootstrap() {
   try {
+    const { NestFactory } = require('@nestjs/core');
+    const { ValidationPipe } = require('@nestjs/common');
+    const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
     const { AppModule } = require('../dist/app.module');
     const { AllExceptionsFilter } = require('../dist/common/filters/all-exceptions.filter');
     const { TransformInterceptor } = require('../dist/common/interceptors/transform.interceptor');
 
-    const adapter = new ExpressAdapter(server);
-    const app = await NestFactory.create(AppModule, adapter, {
+    const nestApp = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log'],
     });
 
-    app.setGlobalPrefix('v1');
+    nestApp.setGlobalPrefix('v1');
 
-    app.enableCors({
+    nestApp.enableCors({
       origin: [
         'http://localhost:3000',
         'http://localhost:3100',
@@ -29,7 +25,7 @@ async function bootstrap() {
       credentials: true,
     });
 
-    app.useGlobalPipes(
+    nestApp.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
@@ -37,40 +33,43 @@ async function bootstrap() {
       }),
     );
 
-    app.useGlobalFilters(new AllExceptionsFilter());
-    app.useGlobalInterceptors(new TransformInterceptor());
+    nestApp.useGlobalFilters(new AllExceptionsFilter());
+    nestApp.useGlobalInterceptors(new TransformInterceptor());
 
-    // Swagger UI
     const config = new DocumentBuilder()
       .setTitle('JOJUWallet API')
       .setDescription('TRON TRC-20 Custodial Wallet API')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('v1/docs', app, document);
+    const document = SwaggerModule.createDocument(nestApp, config);
+    SwaggerModule.setup('v1/docs', nestApp, document);
 
-    await app.init();
+    await nestApp.init();
+    app = nestApp.getHttpAdapter().getInstance();
     console.log('NestJS app initialized for Vercel');
-  } catch (err) {
-    console.error('Failed to bootstrap NestJS app:', err);
-    // Fallback: respond with error on all requests
-    server.use((req, res) => {
-      res.status(500).json({
-        success: false,
-        error: {
-          code: 'BOOTSTRAP_FAILED',
-          message: err.message || 'Server initialization failed',
-        },
-      });
-    });
+  } catch (e) {
+    initError = e;
+    console.error('Bootstrap failed:', e);
   }
 }
 
-// Start bootstrap immediately (not lazily)
-bootstrapPromise = bootstrap();
+const ready = bootstrap();
 
 module.exports = async (req, res) => {
-  await bootstrapPromise;
-  server(req, res);
+  await ready;
+  if (initError) {
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      success: false,
+      error: {
+        code: 'BOOTSTRAP_FAILED',
+        message: initError.message || 'Server initialization failed',
+        stack: process.env.NODE_ENV !== 'production' ? initError.stack : undefined,
+      },
+    }));
+    return;
+  }
+  app(req, res);
 };
