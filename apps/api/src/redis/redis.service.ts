@@ -10,7 +10,12 @@ export class RedisService implements OnModuleDestroy {
 
   constructor(private readonly configService: ConfigService) {}
 
-  getClient(): Redis {
+  getClient(): Redis | null {
+    // Skip Redis entirely on Vercel serverless
+    if (process.env.VERCEL) {
+      return null;
+    }
+
     if (!this.client) {
       const url = this.configService.get<string>('REDIS_URL', 'redis://localhost:6379');
       this.client = new Redis(url, {
@@ -40,7 +45,9 @@ export class RedisService implements OnModuleDestroy {
 
   async get(key: string): Promise<string | null> {
     try {
-      return await this.getClient().get(key);
+      const client = this.getClient();
+      if (!client) return null;
+      return await client.get(key);
     } catch {
       return null;
     }
@@ -48,10 +55,12 @@ export class RedisService implements OnModuleDestroy {
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
     try {
+      const client = this.getClient();
+      if (!client) return;
       if (ttlSeconds) {
-        await this.getClient().set(key, value, 'EX', ttlSeconds);
+        await client.set(key, value, 'EX', ttlSeconds);
       } else {
-        await this.getClient().set(key, value);
+        await client.set(key, value);
       }
     } catch {
       // Silently fail - cache is optional
@@ -60,7 +69,9 @@ export class RedisService implements OnModuleDestroy {
 
   async del(key: string): Promise<void> {
     try {
-      await this.getClient().del(key);
+      const client = this.getClient();
+      if (!client) return;
+      await client.del(key);
     } catch {
       // Silently fail
     }
