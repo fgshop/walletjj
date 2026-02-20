@@ -1,15 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build && rm -f apps/api/dist/main.js apps/api/dist/main.d.ts apps/api/dist/main.js.map",
-  "functions": {
-    "api/index.js": {
-      "maxDuration": 60,
-      "includeFiles": "node_modules/.prisma/**"
+  "buildCommand": "pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build",
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "includeFiles": ["node_modules/.prisma/**"]
+      }
     }
-  },
-  "rewrites": [
-    { "source": "/v1/(.*)", "destination": "/api" },
-    { "source": "/docs", "destination": "/api" },
-    { "source": "/(.*)", "destination": "/api" }
+  ],
+  "routes": [
+    { "src": "/v1/(.*)", "dest": "/api" },
+    { "src": "/docs", "dest": "/api" },
+    { "src": "/(.*)", "dest": "/api" }
   ]
 }
