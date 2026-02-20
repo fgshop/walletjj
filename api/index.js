@@ -30,7 +30,7 @@ async function bootstrap() {
     logger: ['error', 'warn', 'log'],
   });
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('v1');
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
@@ -45,7 +45,7 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   await app.init();
   return server;
