@@ -100,17 +100,15 @@ function getCounterparty(tx: TransactionItem, isOutgoing: boolean): string {
 export default function TransactionList({ transactions, loading, currentUserId }: TransactionListProps) {
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div className="divide-y divide-white/[0.06]">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-xl bg-white/[0.03] p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full shimmer" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-24 rounded shimmer" />
-                <div className="h-3 w-32 rounded shimmer" />
-              </div>
-              <div className="h-5 w-20 rounded shimmer" />
+          <div key={i} className="flex items-center gap-3 py-3.5">
+            <div className="h-8 w-8 rounded-full shimmer" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-24 rounded shimmer" />
+              <div className="h-3 w-40 rounded shimmer" />
             </div>
+            <div className="h-5 w-24 rounded shimmer" />
           </div>
         ))}
       </div>
@@ -129,9 +127,8 @@ export default function TransactionList({ transactions, loading, currentUserId }
   }
 
   return (
-    <div className="space-y-2">
+    <div className="divide-y divide-white/[0.06]">
       {transactions.map((tx) => {
-        // For INTERNAL transactions, use currentUserId to determine direction
         const isOutgoing = tx.type === TxType.INTERNAL
           ? (currentUserId ? tx.fromUserId === currentUserId : true)
           : tx.type === TxType.EXTERNAL_SEND;
@@ -146,7 +143,7 @@ export default function TransactionList({ transactions, loading, currentUserId }
           : config.label;
 
         return (
-          <div key={tx.id} className="flex items-center gap-3 rounded-xl bg-white/[0.02] p-4 transition-all duration-300 hover:bg-white/[0.05]">
+          <div key={tx.id} className="flex items-center gap-3 py-3.5 transition-colors hover:bg-white/[0.02]">
             {typeIcon(isOutgoing)}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
@@ -162,7 +159,7 @@ export default function TransactionList({ transactions, loading, currentUserId }
                 {getCounterparty(tx, isOutgoing)}
               </p>
             </div>
-            <div className="text-right">
+            <div className="shrink-0 text-right">
               <p className={`text-sm font-semibold ${isOutgoing ? 'text-red-400' : 'text-green-400'}`}>
                 {isOutgoing ? '-' : '+'}{formatAmount(tx.amount, tx.tokenDecimals)} {tx.tokenSymbol}
               </p>
