@@ -1,3 +1,15 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build && rm -f apps/api/dist/main.js apps/api/dist/main.d.ts apps/api/dist/main.js.map",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "includeFiles": "apps/api/node_modules/.prisma/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/v1/(.*)", "destination": "/api" },
+    { "source": "/docs", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/api" }
+  ]
 }
