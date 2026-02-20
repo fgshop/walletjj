@@ -1,3 +1,13 @@
+// Suppress Redis/ioredis unhandled errors that crash the process
+process.on('unhandledRejection', (reason) => {
+  if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) return;
+  console.error('Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  if (err && (err.code === 'ECONNREFUSED' || (err.message && err.message.includes('Connection is closed')))) return;
+  console.error('Uncaught Exception:', err);
+});
+
 let app;
 let initError;
 
@@ -66,7 +76,6 @@ module.exports = async (req, res) => {
       error: {
         code: 'BOOTSTRAP_FAILED',
         message: initError.message || 'Server initialization failed',
-        stack: process.env.NODE_ENV !== 'production' ? initError.stack : undefined,
       },
     }));
     return;
