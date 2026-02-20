@@ -1,27 +1,46 @@
-const { NestFactory } = require('@nestjs/core');
-const { ValidationPipe } = require('@nestjs/common');
-const { ExpressAdapter } = require('@nestjs/platform-express');
-const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
-const express = require('express');
+// ── Crash guard ──
+process.on('unhandledRejection', (reason) => {
+  // Suppress Redis ECONNREFUSED in serverless
+  if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
+    return;
+  }
+  console.error('[Vercel] Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  if (err && (err.code === 'ECONNREFUSED' || (err.message && err.message.includes('Connection is closed')))) {
+    return;
+  }
+  console.error('[Vercel] Uncaught Exception:', err);
+});
 
-// Force Vercel bundler to trace ESM-only packages used via dynamic import() in crypto.service.
-// Without these hints, @vercel/nft cannot detect them (they use Function('s','return import(s)') trick).
+// ── Help @vercel/nft trace Prisma + ESM-only packages ──
+try { require('../apps/api/node_modules/.prisma/client'); } catch (_) {}
 import('@scure/bip32').catch(() => {});
 import('@scure/bip39').catch(() => {});
 import('@scure/bip39/wordlists/english.js').catch(() => {});
 
-// Suppress Redis ECONNREFUSED crashes in serverless (no Redis available)
-process.on('unhandledRejection', (reason) => {
-  if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
-    return;
+// ── CORS ──
+function setCorsHeaders(req, res) {
+  const origin = req.headers['origin'] || '';
+  if (!origin || origin.includes('localhost') || origin.endsWith('.vercel.app')) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
   }
-  console.error('Unhandled Rejection:', reason);
-});
+  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+// ── Bootstrap ──
+const express = require('express');
 
 let cachedServer;
 
 async function bootstrap() {
   const server = express();
+  const { NestFactory } = require('@nestjs/core');
+  const { ValidationPipe } = require('@nestjs/common');
+  const { ExpressAdapter } = require('@nestjs/platform-express');
   const { AppModule } = require('../apps/api/dist/app.module');
   const { AllExceptionsFilter } = require('../apps/api/dist/common/filters/all-exceptions.filter');
   const { TransformInterceptor } = require('../apps/api/dist/common/interceptors/transform.interceptor');
@@ -31,27 +50,40 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('v1');
-  app.enableCors({ origin: true, credentials: true });
+
+  app.enableCors({
+    origin: function (origin, callback) {
+      if (!origin || origin.includes('localhost') || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  const config = new DocumentBuilder()
-    .setTitle('JOJUWallet API')
-    .setDescription('TRON TRC-20 Custodial Wallet API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
-
   await app.init();
+  console.log('[Vercel] NestJS app initialized successfully');
   return server;
 }
 
 module.exports = async (req, res) => {
+  // Handle CORS preflight immediately
+  setCorsHeaders(req, res);
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   try {
     if (!cachedServer) {
       cachedServer = bootstrap();
@@ -59,12 +91,16 @@ module.exports = async (req, res) => {
     const server = await cachedServer;
     server(req, res);
   } catch (error) {
-    console.error('Serverless bootstrap error:', error);
+    console.error('[Vercel] Bootstrap error:', error);
     cachedServer = null;
-    res.status(500).json({
-      statusCode: 500,
-      message: 'Server initialization failed',
-      error: error.message,
-    });
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      success: false,
+      error: {
+        code: 'BOOTSTRAP_FAILED',
+        message: error.message || 'Server initialization failed',
+      },
+    }));
   }
 };
