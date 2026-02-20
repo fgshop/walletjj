@@ -1,18 +1,26 @@
+const express = require('express');
 const { NestFactory } = require('@nestjs/core');
+const { ExpressAdapter } = require('@nestjs/platform-express');
 const { ValidationPipe } = require('@nestjs/common');
-const { AppModule } = require('../dist/app.module');
-const { AllExceptionsFilter } = require('../dist/common/filters/all-exceptions.filter');
-const { TransformInterceptor } = require('../dist/common/interceptors/transform.interceptor');
+const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
 
-let app;
+const server = express();
+let bootstrapPromise = null;
 
-module.exports = async (req, res) => {
-  if (!app) {
-    const nestApp = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
+async function bootstrap() {
+  try {
+    const { AppModule } = require('../dist/app.module');
+    const { AllExceptionsFilter } = require('../dist/common/filters/all-exceptions.filter');
+    const { TransformInterceptor } = require('../dist/common/interceptors/transform.interceptor');
 
-    nestApp.setGlobalPrefix('v1');
+    const adapter = new ExpressAdapter(server);
+    const app = await NestFactory.create(AppModule, adapter, {
+      logger: ['error', 'warn', 'log'],
+    });
 
-    nestApp.enableCors({
+    app.setGlobalPrefix('v1');
+
+    app.enableCors({
       origin: [
         'http://localhost:3000',
         'http://localhost:3100',
@@ -21,7 +29,7 @@ module.exports = async (req, res) => {
       credentials: true,
     });
 
-    nestApp.useGlobalPipes(
+    app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
@@ -29,12 +37,40 @@ module.exports = async (req, res) => {
       }),
     );
 
-    nestApp.useGlobalFilters(new AllExceptionsFilter());
-    nestApp.useGlobalInterceptors(new TransformInterceptor());
+    app.useGlobalFilters(new AllExceptionsFilter());
+    app.useGlobalInterceptors(new TransformInterceptor());
 
-    await nestApp.init();
-    app = nestApp.getHttpAdapter().getInstance();
+    // Swagger UI
+    const config = new DocumentBuilder()
+      .setTitle('JOJUWallet API')
+      .setDescription('TRON TRC-20 Custodial Wallet API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('v1/docs', app, document);
+
+    await app.init();
+    console.log('NestJS app initialized for Vercel');
+  } catch (err) {
+    console.error('Failed to bootstrap NestJS app:', err);
+    // Fallback: respond with error on all requests
+    server.use((req, res) => {
+      res.status(500).json({
+        success: false,
+        error: {
+          code: 'BOOTSTRAP_FAILED',
+          message: err.message || 'Server initialization failed',
+        },
+      });
+    });
   }
+}
 
-  app(req, res);
+// Start bootstrap immediately (not lazily)
+bootstrapPromise = bootstrap();
+
+module.exports = async (req, res) => {
+  await bootstrapPromise;
+  server(req, res);
 };
