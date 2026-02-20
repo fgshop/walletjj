@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @joju/types build && pnpm --filter @joju/utils build && cd apps/api && prisma generate && nest build",
+  "buildCommand": "pnpm --filter @joju/types build && pnpm --filter @joju/utils build && prisma generate && nest build",
   "functions": {
     "api/index.js": {
       "maxDuration": 60
