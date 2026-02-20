@@ -1,15 +1,23 @@
 // ── Crash guard ──
 process.on('unhandledRejection', (reason) => {
+  // Suppress Redis ECONNREFUSED in serverless
+  if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
+    return;
+  }
   console.error('[Vercel] Unhandled Rejection:', reason);
 });
 process.on('uncaughtException', (err) => {
+  if (err && (err.code === 'ECONNREFUSED' || (err.message && err.message.includes('Connection is closed')))) {
+    return;
+  }
   console.error('[Vercel] Uncaught Exception:', err);
 });
 
-// ── Help @vercel/nft trace the Prisma generated client ──
-try {
-  require('../node_modules/.prisma/client');
-} catch (_) {}
+// ── Help @vercel/nft trace Prisma + ESM-only packages ──
+try { require('../node_modules/.prisma/client'); } catch (_) {}
+import('@scure/bip32').catch(() => {});
+import('@scure/bip39').catch(() => {});
+import('@scure/bip39/wordlists/english.js').catch(() => {});
 
 // ── CORS ──
 function setCorsHeaders(req, res) {
@@ -23,56 +31,53 @@ function setCorsHeaders(req, res) {
   res.setHeader('Access-Control-Max-Age', '86400');
 }
 
-let app;
-let initError;
+// ── Bootstrap ──
+const express = require('express');
+
+let cachedServer;
 
 async function bootstrap() {
-  try {
-    const { NestFactory } = require('@nestjs/core');
-    const { ValidationPipe } = require('@nestjs/common');
-    const { AppModule } = require('../dist/app.module');
-    const { AllExceptionsFilter } = require('../dist/common/filters/all-exceptions.filter');
-    const { TransformInterceptor } = require('../dist/common/interceptors/transform.interceptor');
+  const server = express();
+  const { NestFactory } = require('@nestjs/core');
+  const { ValidationPipe } = require('@nestjs/common');
+  const { ExpressAdapter } = require('@nestjs/platform-express');
+  const { AppModule } = require('../dist/app.module');
+  const { AllExceptionsFilter } = require('../dist/common/filters/all-exceptions.filter');
+  const { TransformInterceptor } = require('../dist/common/interceptors/transform.interceptor');
 
-    const nestApp = await NestFactory.create(AppModule, {
-      logger: ['error', 'warn', 'log'],
-    });
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
+    logger: ['error', 'warn', 'log'],
+  });
 
-    nestApp.setGlobalPrefix('v1');
+  app.setGlobalPrefix('v1');
 
-    nestApp.enableCors({
-      origin: function (origin, callback) {
-        if (!origin || origin.includes('localhost') || origin.endsWith('.vercel.app')) {
-          callback(null, true);
-        } else {
-          callback(null, false);
-        }
-      },
-      credentials: true,
-      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-    });
+  app.enableCors({
+    origin: function (origin, callback) {
+      if (!origin || origin.includes('localhost') || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  });
 
-    nestApp.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
-    nestApp.useGlobalFilters(new AllExceptionsFilter());
-    nestApp.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+  );
+  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalInterceptors(new TransformInterceptor());
 
-    await nestApp.init();
-    app = nestApp.getHttpAdapter().getInstance();
-    console.log('[Vercel] NestJS app initialized successfully');
-  } catch (e) {
-    initError = e;
-    console.error('[Vercel] Bootstrap FAILED:', e.message, e.stack);
-  }
+  await app.init();
+  console.log('[Vercel] NestJS app initialized successfully');
+  return server;
 }
 
-const ready = bootstrap();
-
 module.exports = async (req, res) => {
+  // Handle CORS preflight immediately
   setCorsHeaders(req, res);
-
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.end();
@@ -80,29 +85,21 @@ module.exports = async (req, res) => {
   }
 
   try {
-    await ready;
-    if (initError) {
-      res.statusCode = 500;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        success: false,
-        error: {
-          code: 'BOOTSTRAP_FAILED',
-          message: initError.message || 'Server initialization failed',
-        },
-      }));
-      return;
+    if (!cachedServer) {
+      cachedServer = bootstrap();
     }
-    app(req, res);
-  } catch (handlerError) {
-    console.error('[Vercel] Handler error:', handlerError);
+    const server = await cachedServer;
+    server(req, res);
+  } catch (error) {
+    console.error('[Vercel] Bootstrap error:', error);
+    cachedServer = null;
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({
       success: false,
       error: {
-        code: 'HANDLER_ERROR',
-        message: handlerError.message || 'Unknown handler error',
+        code: 'BOOTSTRAP_FAILED',
+        message: error.message || 'Server initialization failed',
       },
     }));
   }
