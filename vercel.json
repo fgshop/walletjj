@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm turbo run build --filter=@joju/api...",
+  "buildCommand": "node -v && pnpm -v && pnpm turbo run build --filter=@joju/api... --output-logs=full",
   "functions": {
     "api/index.js": {
       "maxDuration": 60

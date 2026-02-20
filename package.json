@@ -25,8 +25,7 @@
       "@prisma/engines",
       "prisma",
       "@nestjs/core",
-      "sharp",
-      "bcrypt"
+      "sharp"
     ]
   },
   "dependencies": {
