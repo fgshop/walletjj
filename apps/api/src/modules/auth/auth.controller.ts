@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendCodeDto } from './dto/resend-code.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { Public } from '../../common/decorators/public.decorator';
@@ -46,8 +47,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Resend verification code to email' })
   @ApiResponse({ status: 200, description: 'New verification code sent' })
   @ApiResponse({ status: 404, description: 'User not found or already verified' })
-  async resendCode(@Body('email') email: string) {
-    return this.authService.resendVerificationCode(email);
+  async resendCode(@Body() dto: ResendCodeDto) {
+    return this.authService.resendVerificationCode(dto.email);
   }
 
   @Public()

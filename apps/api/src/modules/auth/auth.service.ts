@@ -130,7 +130,11 @@ export class AuthService {
     });
 
     this.logger.log(`Resend verification code for ${email}: ${code}`);
-    await this.emailService.sendVerificationCode(email, code);
+    try {
+      await this.emailService.sendVerificationCode(email, code);
+    } catch (err) {
+      this.logger.warn(`Failed to send verification email to ${email}: ${err}`);
+    }
 
     return { message: 'New verification code sent' };
   }
