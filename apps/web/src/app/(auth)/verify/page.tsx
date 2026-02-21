@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { verifyEmail } from '@/lib/auth';
+import api from '@/lib/api';
 
 function VerifyForm() {
   const router = useRouter();
@@ -13,6 +14,8 @@ function VerifyForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState('');
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -122,11 +125,39 @@ function VerifyForm() {
               {loading ? '인증 중...' : '인증하기'}
             </button>
 
-            <p className="mt-5 text-center text-sm text-gray-400">
-              <a href="/login" className="font-medium text-purple-400 transition-colors hover:text-purple-300">
+            <div className="mt-5 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                disabled={resending || !email}
+                onClick={async () => {
+                  setResending(true);
+                  setResendMsg('');
+                  setError('');
+                  try {
+                    await api.post('/auth/resend-code', { email });
+                    setResendMsg('새 인증 코드가 전송되었습니다.');
+                    setCode(['', '', '', '', '', '']);
+                    inputRefs.current[0]?.focus();
+                  } catch {
+                    setResendMsg('코드 재전송에 실패했습니다.');
+                  } finally {
+                    setResending(false);
+                  }
+                }}
+                className="text-sm font-medium text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-50"
+              >
+                {resending ? '전송 중...' : '코드 재전송'}
+              </button>
+              <span className="text-gray-600">|</span>
+              <a href="/login" className="text-sm font-medium text-purple-400 transition-colors hover:text-purple-300">
                 로그인으로 돌아가기
               </a>
-            </p>
+            </div>
+            {resendMsg && (
+              <p className={`mt-2 text-center text-xs ${resendMsg.includes('전송되었') ? 'text-green-400' : 'text-red-400'}`}>
+                {resendMsg}
+              </p>
+            )}
           </form>
         </div>
       </div>

@@ -41,6 +41,16 @@ export class AuthController {
   }
 
   @Public()
+  @Post('resend-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend verification code to email' })
+  @ApiResponse({ status: 200, description: 'New verification code sent' })
+  @ApiResponse({ status: 404, description: 'User not found or already verified' })
+  async resendCode(@Body('email') email: string) {
+    return this.authService.resendVerificationCode(email);
+  }
+
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })

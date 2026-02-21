@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -61,7 +62,7 @@ export class AuthService {
     const wallet = await this.walletService.createWalletForUser(user.id);
 
     this.logger.log(`User registered: ${dto.email}, verification code: ${code}`);
-    this.emailService.sendVerificationCode(dto.email, code);
+    await this.emailService.sendVerificationCode(dto.email, code);
 
     return {
       id: user.id,
@@ -101,6 +102,37 @@ export class AuthService {
     ]);
 
     return { message: 'Email verified successfully' };
+  }
+
+  async resendVerificationCode(email: string) {
+    if (!email) throw new BadRequestException('Email is required');
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.isEmailVerified) throw new BadRequestException('Email is already verified');
+
+    // Invalidate old codes
+    await this.prisma.emailVerification.updateMany({
+      where: { email, isUsed: false },
+      data: { isUsed: true },
+    });
+
+    // Generate new code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    await this.prisma.emailVerification.create({
+      data: {
+        email,
+        code,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    });
+
+    this.logger.log(`Resend verification code for ${email}: ${code}`);
+    await this.emailService.sendVerificationCode(email, code);
+
+    return { message: 'New verification code sent' };
   }
 
   async login(dto: LoginDto, ipAddress?: string) {

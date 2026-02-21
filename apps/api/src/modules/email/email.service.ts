@@ -8,10 +8,10 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor(private readonly configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com');
-    const port = this.configService.get<number>('SMTP_PORT', 587);
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
+    const host = (this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com') || '').trim();
+    const port = Number((this.configService.get<string>('SMTP_PORT', '587') || '').toString().trim());
+    const user = (this.configService.get<string>('SMTP_USER') || '').trim();
+    const pass = (this.configService.get<string>('SMTP_PASS') || '').trim();
 
     if (user && pass) {
       this.transporter = nodemailer.createTransport({
@@ -52,10 +52,10 @@ export class EmailService {
     }
 
     try {
-      const from = this.configService.get<string>(
+      const from = (this.configService.get<string>(
         'SMTP_FROM',
-        `JOJUWallet <${this.configService.get<string>('SMTP_USER')}>`,
-      );
+        `JOJUWallet <${(this.configService.get<string>('SMTP_USER') || '').trim()}>`,
+      ) || '').trim();
       await this.transporter.sendMail({ from, to, subject, html });
       this.logger.log(`Verification email sent to ${to}`);
     } catch (error) {
