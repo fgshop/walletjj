@@ -26,18 +26,23 @@ export default function LoginPage() {
       await login({ email, password });
       router.push('/dashboard');
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { error?: { message?: string; code?: string }; message?: string } } };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const axiosErr = err as any;
       const status = axiosErr?.response?.status;
       const resp = axiosErr?.response?.data;
-      const errCode = resp?.error?.code;
-      const errMsg = (resp?.error?.message || resp?.message || '').toLowerCase();
+
+      // Collect all possible code/message fields
+      const errCode = resp?.error?.code || resp?.code || '';
+      const errMsg = String(resp?.error?.message || resp?.message || axiosErr?.message || '').toLowerCase();
 
       // Detect email not verified: check code OR message keywords
-      if (
+      const isEmailNotVerified =
         errCode === 'EMAIL_NOT_VERIFIED' ||
-        (status === 400 && (errMsg.includes('verify') || errMsg.includes('not verified') || errMsg.includes('인증')))
-      ) {
-        router.push(`/verify?email=${encodeURIComponent(email)}`);
+        (status === 400 && (errMsg.includes('verify') || errMsg.includes('not verified') || errMsg.includes('인증')));
+
+      if (isEmailNotVerified) {
+        // Use window.location for guaranteed redirect
+        window.location.href = `/verify?email=${encodeURIComponent(email)}`;
         return;
       }
 
