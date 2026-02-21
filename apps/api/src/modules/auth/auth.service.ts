@@ -154,7 +154,11 @@ export class AuthService {
     }
 
     if (!user.isEmailVerified) {
-      throw new UnauthorizedException('Please verify your email first');
+      throw new BadRequestException({
+        message: 'Email not verified',
+        code: 'EMAIL_NOT_VERIFIED',
+        email: user.email,
+      });
     }
 
     // Generate JWT tokens

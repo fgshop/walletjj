@@ -26,7 +26,15 @@ export default function LoginPage() {
       await login({ email, password });
       router.push('/dashboard');
     } catch (err: unknown) {
-      const resp = (err as { response?: { data?: { error?: { message?: string }; message?: string } } })?.response?.data;
+      const resp = (err as { response?: { data?: { error?: { message?: string; code?: string; email?: string }; message?: string } } })?.response?.data;
+      const errCode = resp?.error?.code;
+
+      if (errCode === 'EMAIL_NOT_VERIFIED') {
+        // Redirect to email verification page
+        router.push(`/verify?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
       const msg = resp?.error?.message || resp?.message;
       setError(msg || '로그인에 실패했습니다.');
     } finally {

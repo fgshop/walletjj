@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { verifyEmail } from '@/lib/auth';
 import api from '@/lib/api';
@@ -16,11 +16,37 @@ function VerifyForm() {
   const [success, setSuccess] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
+  const [autoSent, setAutoSent] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleResend = useCallback(async () => {
+    if (!email || resending) return;
+    setResending(true);
+    setResendMsg('');
+    setError('');
+    try {
+      await api.post('/auth/resend-code', { email });
+      setResendMsg('새 인증 코드가 전송되었습니다. 이메일을 확인해주세요.');
+      setCode(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch {
+      setResendMsg('코드 재전송에 실패했습니다.');
+    } finally {
+      setResending(false);
+    }
+  }, [email, resending]);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
   }, []);
+
+  // Auto-send a new code when arriving from login redirect
+  useEffect(() => {
+    if (email && !autoSent) {
+      setAutoSent(true);
+      handleResend();
+    }
+  }, [email, autoSent, handleResend]);
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
@@ -54,6 +80,7 @@ function VerifyForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setResendMsg('');
     const fullCode = code.join('');
 
     if (fullCode.length !== 6) {
@@ -100,6 +127,11 @@ function VerifyForm() {
                 이메일 인증이 완료되었습니다! 로그인 페이지로 이동합니다.
               </div>
             )}
+            {resendMsg && (
+              <div className={`mb-4 rounded-lg p-3 text-sm ${resendMsg.includes('전송되었') ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                {resendMsg}
+              </div>
+            )}
 
             <div className="flex justify-center gap-3" onPaste={handlePaste}>
               {code.map((digit, i) => (
@@ -129,21 +161,7 @@ function VerifyForm() {
               <button
                 type="button"
                 disabled={resending || !email}
-                onClick={async () => {
-                  setResending(true);
-                  setResendMsg('');
-                  setError('');
-                  try {
-                    await api.post('/auth/resend-code', { email });
-                    setResendMsg('새 인증 코드가 전송되었습니다.');
-                    setCode(['', '', '', '', '', '']);
-                    inputRefs.current[0]?.focus();
-                  } catch {
-                    setResendMsg('코드 재전송에 실패했습니다.');
-                  } finally {
-                    setResending(false);
-                  }
-                }}
+                onClick={handleResend}
                 className="text-sm font-medium text-cyan-400 transition-colors hover:text-cyan-300 disabled:opacity-50"
               >
                 {resending ? '전송 중...' : '코드 재전송'}
@@ -153,11 +171,6 @@ function VerifyForm() {
                 로그인으로 돌아가기
               </a>
             </div>
-            {resendMsg && (
-              <p className={`mt-2 text-center text-xs ${resendMsg.includes('전송되었') ? 'text-green-400' : 'text-red-400'}`}>
-                {resendMsg}
-              </p>
-            )}
           </form>
         </div>
       </div>
