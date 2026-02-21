@@ -1,5 +1,6 @@
 {
-  "buildCommand": "cd ../.. && pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build && rm -f apps/api/dist/main.js apps/api/dist/main.d.ts apps/api/dist/main.js.map",
+  "framework": null,
+  "buildCommand": "cd ../.. && pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build",
   "outputDirectory": ".",
   "functions": {
     "api/index.js": {
