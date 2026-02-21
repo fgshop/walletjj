@@ -26,11 +26,17 @@ export default function LoginPage() {
       await login({ email, password });
       router.push('/dashboard');
     } catch (err: unknown) {
-      const resp = (err as { response?: { data?: { error?: { message?: string; code?: string; email?: string }; message?: string } } })?.response?.data;
+      const axiosErr = err as { response?: { status?: number; data?: { error?: { message?: string; code?: string }; message?: string } } };
+      const status = axiosErr?.response?.status;
+      const resp = axiosErr?.response?.data;
       const errCode = resp?.error?.code;
+      const errMsg = (resp?.error?.message || resp?.message || '').toLowerCase();
 
-      if (errCode === 'EMAIL_NOT_VERIFIED') {
-        // Redirect to email verification page
+      // Detect email not verified: check code OR message keywords
+      if (
+        errCode === 'EMAIL_NOT_VERIFIED' ||
+        (status === 400 && (errMsg.includes('verify') || errMsg.includes('not verified') || errMsg.includes('인증')))
+      ) {
         router.push(`/verify?email=${encodeURIComponent(email)}`);
         return;
       }
