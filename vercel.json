@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "pnpm --filter @joju/types build && pnpm --filter @joju/utils build && cd apps/api && npx prisma generate && mkdir -p ../../node_modules/.prisma && cp -r node_modules/.prisma/client ../../node_modules/.prisma/ && rm -rf dist && npx tsc -p tsconfig.vercel.json",
+  "buildCommand": "bash apps/api/scripts/vercel-build.sh",
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
