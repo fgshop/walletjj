@@ -7,18 +7,18 @@ export class TronService {
   private tronWeb: any;
 
   constructor(private readonly configService: ConfigService) {
-    const fullHost = this.configService.get<string>(
+    const fullHost = (this.configService.get<string>(
       'TRON_FULL_HOST',
       'https://api.shasta.trongrid.io',
-    );
-    const apiKey = this.configService.get<string>('TRON_API_KEY', '');
+    ) || '').trim();
+    const apiKey = (this.configService.get<string>('TRON_API_KEY', '') || '').trim();
 
     // A default address is required for read-only contract .call() methods (e.g. balanceOf).
     // This is a well-known Shasta testnet address used only as a caller identity for view functions.
-    const defaultAddress = this.configService.get<string>(
+    const defaultAddress = (this.configService.get<string>(
       'TRON_DEFAULT_ADDRESS',
       'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb',
-    );
+    ) || '').trim();
 
     const { TronWeb } = require('tronweb');
     this.tronWeb = new TronWeb({
@@ -154,11 +154,11 @@ export class TronService {
   }
 
   private createSigningInstance(privateKey: string): any {
-    const fullHost = this.configService.get<string>(
+    const fullHost = (this.configService.get<string>(
       'TRON_FULL_HOST',
       'https://api.shasta.trongrid.io',
-    );
-    const apiKey = this.configService.get<string>('TRON_API_KEY', '');
+    ) || '').trim();
+    const apiKey = (this.configService.get<string>('TRON_API_KEY', '') || '').trim();
     const { TronWeb } = require('tronweb');
     return new TronWeb({
       fullHost,
