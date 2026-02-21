@@ -1,4 +1,5 @@
 # JOJUWallet 잔액 체계: 온체인 vs 내부 (Off-chain)
+# 2026.02.20
 
 ## 1. 개요
 
