@@ -22,8 +22,14 @@ interface BalanceEntry {
   decimals: number;
 }
 
+interface OffchainBalanceEntry {
+  symbol: string;
+  balance: string;
+}
+
 interface WalletBalance {
   balances: BalanceEntry[];
+  offchainBalances: OffchainBalanceEntry[];
   pendingBySymbol: Record<string, number>;
 }
 
@@ -115,6 +121,7 @@ export default function WalletsPage() {
           ...prev,
           [w.id]: {
             balances: data.balances || [],
+            offchainBalances: data.offchainBalances || [],
             pendingBySymbol: data.pendingBySymbol || {},
           },
         }));
@@ -258,8 +265,8 @@ export default function WalletsPage() {
         if (isLoading || (!bal && !balanceLoading.hasOwnProperty(row.id))) {
           return (
             <div className="space-y-1">
-              <div className="h-4 w-24 rounded bg-white/5 animate-pulse" />
-              <div className="h-3 w-20 rounded bg-white/5 animate-pulse" />
+              <div className="h-4 w-32 rounded bg-white/5 animate-pulse" />
+              <div className="h-3 w-28 rounded bg-white/5 animate-pulse" />
             </div>
           );
         }
@@ -269,19 +276,46 @@ export default function WalletsPage() {
         }
 
         return (
-          <div className="space-y-0.5">
+          <div className="space-y-1.5">
             {bal.balances.map((b) => {
+              const offchain = bal.offchainBalances?.find((o) => o.symbol === b.symbol);
               const pending = bal.pendingBySymbol[b.symbol] || 0;
+              const onchainNum = Number(b.balance) || 0;
+              const offchainNum = Number(offchain?.balance ?? 0);
+              const diff = Math.abs(onchainNum - offchainNum);
+              const hasMismatch = diff >= 0.01;
+
               return (
-                <div key={b.symbol} className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold text-text tabular-nums">
-                    {fmtBalance(b.balance, b.decimals)}
-                  </span>
-                  <span className="text-[11px] font-medium text-text-secondary">{b.symbol}</span>
+                <div key={b.symbol} className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-text-secondary w-8">{b.symbol}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1" title="온체인 잔액 (블록체인)">
+                        <span className="text-[10px] text-cyan-400/70">온체인</span>
+                        <span className={`font-mono text-xs tabular-nums ${hasMismatch ? 'text-cyan-300 font-semibold' : 'text-text-secondary'}`}>
+                          {fmtBalance(b.balance, b.decimals)}
+                        </span>
+                      </span>
+                      <span className="text-text-secondary/30">|</span>
+                      <span className="inline-flex items-center gap-1" title="오프체인 잔액 (DB 계산)">
+                        <span className="text-[10px] text-purple-400/70">오프체인</span>
+                        <span className={`font-mono text-xs tabular-nums ${hasMismatch ? 'text-purple-300 font-semibold' : 'text-text-secondary'}`}>
+                          {fmtBalance(offchain?.balance ?? '0')}
+                        </span>
+                      </span>
+                      {hasMismatch && (
+                        <span className="rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-medium text-red-400" title="온체인/오프체인 불일치">
+                          차이 {fmtBalance(diff)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   {pending > 0 && (
-                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400" title="출금 대기 중">
-                      -{fmtBalance(pending)} 대기
-                    </span>
+                    <div className="ml-10">
+                      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400" title="출금 대기 중">
+                        -{fmtBalance(pending)} 대기
+                      </span>
+                    </div>
                   )}
                 </div>
               );
