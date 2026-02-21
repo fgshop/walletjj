@@ -148,17 +148,19 @@ export class AuthService {
       throw new UnauthorizedException('Account is suspended or deactivated');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
+    // Check email verification BEFORE password so unverified users
+    // are always redirected to the verify page
     if (!user.isEmailVerified) {
       throw new BadRequestException({
         message: 'Email not verified',
         code: 'EMAIL_NOT_VERIFIED',
         email: user.email,
       });
+    }
+
+    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     // Generate JWT tokens
