@@ -1,6 +1,5 @@
 {
-  "framework": null,
-  "buildCommand": "cd ../.. && pnpm --filter @joju/types build && pnpm --filter @joju/utils build && cd apps/api && npx prisma generate && mkdir -p ../../node_modules/.prisma && cp -r node_modules/.prisma/client ../../node_modules/.prisma/ && npx nest build",
+  "buildCommand": "cd ../.. && pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build && printf 'module.exports = require(\"../api/index.js\");\\n' > apps/api/dist/main.js",
   "outputDirectory": ".",
   "functions": {
     "api/index.js": {
