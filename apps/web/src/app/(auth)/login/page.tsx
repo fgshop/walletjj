@@ -35,13 +35,13 @@ export default function LoginPage() {
       const errCode = resp?.error?.code || resp?.code || '';
       const errMsg = String(resp?.error?.message || resp?.message || axiosErr?.message || '').toLowerCase();
 
-      // Detect email not verified: check code OR message keywords
-      const isEmailNotVerified =
+      // Detect email not verified: check code OR message keywords (any status)
+      if (
         errCode === 'EMAIL_NOT_VERIFIED' ||
-        (status === 400 && (errMsg.includes('verify') || errMsg.includes('not verified') || errMsg.includes('인증')));
-
-      if (isEmailNotVerified) {
-        // Use window.location for guaranteed redirect
+        errMsg.includes('verify your email') ||
+        errMsg.includes('email not verified') ||
+        errMsg.includes('이메일 인증')
+      ) {
         window.location.href = `/verify?email=${encodeURIComponent(email)}`;
         return;
       }
