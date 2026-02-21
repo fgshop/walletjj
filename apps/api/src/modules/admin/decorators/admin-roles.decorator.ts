@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { AdminRole } from '@prisma/client';
+import { AdminRole } from '@joju/types';
 
 export const ADMIN_ROLES_KEY = 'adminRoles';
 export const AdminRoles = (...roles: AdminRole[]) =>

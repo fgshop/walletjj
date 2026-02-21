@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { WithdrawalStatus, TxType, TxStatus } from '@prisma/client';
+import { WithdrawalStatus, TxType, TxStatus } from '@joju/types';
 import { TronService } from '../../wallet/tron/tron.service';
 import { WalletService } from '../../wallet/wallet.service';
 

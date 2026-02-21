@@ -1,6 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AdminRole } from '@prisma/client';
+import { AdminRole } from '@joju/types';
 import { ADMIN_ROLES_KEY } from '../../decorators/admin-roles.decorator';
 
 const ROLE_HIERARCHY: Record<AdminRole, number> = {

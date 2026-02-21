@@ -11,7 +11,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationService } from '../../notification/notification.service';
 import { ReviewAction } from '../dto/review-withdrawal.dto';
-import { WithdrawalStatus } from '@prisma/client';
+import { WithdrawalStatus, NotificationType } from '@joju/types';
 import { WITHDRAWAL_QUEUE } from '../../queue/queue.constants';
 
 @Injectable()
@@ -104,7 +104,7 @@ export class AdminWithdrawalsService {
 
       await this.notificationService.create(
         withdrawal.userId,
-        'WITHDRAWAL_APPROVED',
+        NotificationType.WITHDRAWAL_APPROVED,
         'Withdrawal Approved',
         `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} has been approved and is being processed.`,
         { withdrawalId },
@@ -134,7 +134,7 @@ export class AdminWithdrawalsService {
 
       await this.notificationService.create(
         withdrawal.userId,
-        'WITHDRAWAL_REJECTED',
+        NotificationType.WITHDRAWAL_REJECTED,
         'Withdrawal Rejected',
         `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} has been rejected.${note ? ` Reason: ${note}` : ''}`,
         { withdrawalId },

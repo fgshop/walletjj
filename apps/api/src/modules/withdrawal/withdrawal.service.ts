@@ -13,7 +13,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreateWithdrawalDto } from './dto/create-withdrawal.dto';
 import { WITHDRAWAL_QUEUE } from '../queue/queue.constants';
-import { WithdrawalStatus } from '@prisma/client';
+import { WithdrawalStatus, NotificationType } from '@joju/types';
 import { isValidTronAddress } from '@joju/utils';
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -104,7 +104,7 @@ export class WithdrawalService {
     // 8. Notify user
     await this.notificationService.create(
       userId,
-      'WITHDRAWAL_PENDING',
+      NotificationType.WITHDRAWAL_PENDING,
       'Withdrawal Request Created',
       `Your withdrawal of ${dto.amount} ${tokenSymbol} is pending. It will be available for review in 24 hours.`,
       { withdrawalId: withdrawal.id },

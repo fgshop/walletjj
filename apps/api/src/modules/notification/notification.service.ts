@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NotificationType } from '@prisma/client';
+import { NotificationType } from '@joju/types';
 
 @Injectable()
 export class NotificationService {

@@ -1,15 +1,3 @@
-// ── Fix .prisma/client resolution (pnpm hoisting + Vercel bundling mismatch) ──
-const path = require('path');
-const Module = require('module');
-const _prismaClientDir = path.resolve(__dirname, '..', 'apps', 'api', 'node_modules', '.prisma', 'client');
-const _origResolve = Module._resolveFilename;
-Module._resolveFilename = function(request, parent, isMain, options) {
-  if (request === '.prisma/client') {
-    return path.join(_prismaClientDir, 'index.js');
-  }
-  return _origResolve.apply(this, arguments);
-};
-
 // ── Crash guard ──
 process.on('unhandledRejection', (reason) => {
   // Suppress Redis ECONNREFUSED in serverless

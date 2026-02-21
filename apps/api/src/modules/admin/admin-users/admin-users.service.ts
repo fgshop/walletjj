@@ -3,6 +3,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationService } from '../../notification/notification.service';
 import { AdminQueryDto } from '../dto/admin-query.dto';
+import { NotificationType } from '@joju/types';
 
 @Injectable()
 export class AdminUsersService {
@@ -102,7 +103,7 @@ export class AdminUsersService {
 
     await this.notificationService.create(
       userId,
-      'SYSTEM',
+      NotificationType.SYSTEM,
       'Account Suspended',
       `Your account has been suspended. Reason: ${reason}`,
     );
@@ -130,7 +131,7 @@ export class AdminUsersService {
 
     await this.notificationService.create(
       userId,
-      'SYSTEM',
+      NotificationType.SYSTEM,
       'Account Activated',
       'Your account has been reactivated.',
     );

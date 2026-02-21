@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CryptoService } from '../wallet/crypto/crypto.service';
 import { TronService } from '../wallet/tron/tron.service';
 import { SWEEP_QUEUE } from '../queue/queue.constants';
-import { TxType, TxStatus } from '@prisma/client';
+import { TxType, TxStatus } from '@joju/types';
 
 /** Minimum TRX to keep in user wallet for bandwidth/energy (1 TRX) */
 const TRX_RESERVE_SUN = 1_000_000;

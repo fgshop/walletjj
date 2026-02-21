@@ -11,7 +11,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { NotificationService } from '../notification/notification.service';
 import { InternalTransferDto } from './dto/internal-transfer.dto';
 import { TransactionQueryDto } from './dto/transaction-query.dto';
-import { TxType, TxStatus } from '@prisma/client';
+import { TxType, TxStatus, NotificationType } from '@joju/types';
 import { isValidTronAddress, isValidEmail } from '@joju/utils';
 
 @Injectable()
@@ -117,14 +117,14 @@ export class TransactionService {
       await Promise.all([
         this.notificationService.create(
           userId,
-          'SEND_COMPLETE',
+          NotificationType.SEND_COMPLETE,
           'Transfer Sent',
           `You sent ${dto.amount} ${tokenSymbol} to ${recipientWallet.user.email}`,
           { transactionId: transaction.id },
         ),
         this.notificationService.create(
           recipientWallet.user.id,
-          'RECEIVE',
+          NotificationType.RECEIVE,
           'Transfer Received',
           `You received ${dto.amount} ${tokenSymbol} from ${senderWallet.user.email}`,
           { transactionId: transaction.id },

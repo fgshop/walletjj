@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TronService } from '../wallet/tron/tron.service';
 import { NotificationService } from '../notification/notification.service';
 import { SweepService } from './sweep.service';
-import { TxType, TxStatus } from '@prisma/client';
+import { TxType, TxStatus, NotificationType } from '@joju/types';
 
 const { TronWeb } = require('tronweb');
 
@@ -248,7 +248,7 @@ export class BlockMonitorService implements OnModuleInit {
 
       await this.notificationService.create(
         wallet.userId,
-        'DEPOSIT',
+        NotificationType.DEPOSIT,
         'Deposit Received',
         `You received ${params.amount} ${params.tokenSymbol} from ${params.fromAddress}`,
         { txHash: params.txHash },

@@ -15,7 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtPayload } from '../../common/types/jwt-payload.interface';
-import { Platform } from '@prisma/client';
+import { Platform } from '@joju/types';
 
 @Injectable()
 export class AuthService {

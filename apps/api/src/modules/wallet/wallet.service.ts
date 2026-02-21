@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { TxType, TxStatus } from '@prisma/client';
+import { TxType, TxStatus } from '@joju/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { CryptoService } from './crypto/crypto.service';

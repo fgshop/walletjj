@@ -9,7 +9,7 @@ import { TronService } from '../../wallet/tron/tron.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { AdminQueryDto } from '../dto/admin-query.dto';
 import { SWEEP_QUEUE } from '../../queue/queue.constants';
-import { TxType, TxStatus } from '@prisma/client';
+import { TxType, TxStatus, NotificationType } from '@joju/types';
 
 export interface ReconcileResult {
   address: string;
@@ -102,7 +102,7 @@ export class AdminWalletsService {
 
     await this.notificationService.create(
       wallet.userId,
-      'WALLET_LOCKED',
+      NotificationType.WALLET_LOCKED,
       'Wallet Locked',
       `Your wallet has been locked. Reason: ${reason}`,
     );
@@ -141,7 +141,7 @@ export class AdminWalletsService {
 
     await this.notificationService.create(
       wallet.userId,
-      'WALLET_UNLOCKED',
+      NotificationType.WALLET_UNLOCKED,
       'Wallet Unlocked',
       'Your wallet has been unlocked.',
     );

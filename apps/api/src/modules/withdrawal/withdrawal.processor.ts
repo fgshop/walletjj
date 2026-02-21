@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WITHDRAWAL_QUEUE } from '../queue/queue.constants';
-import { WithdrawalStatus, TxType, TxStatus } from '@prisma/client';
+import { WithdrawalStatus, TxType, TxStatus, NotificationType } from '@joju/types';
 import { CryptoService } from '../wallet/crypto/crypto.service';
 import { TronService } from '../wallet/tron/tron.service';
 import { NotificationService } from '../notification/notification.service';
@@ -182,7 +182,7 @@ export class WithdrawalProcessor extends WorkerHost {
 
       await this.notificationService.create(
         withdrawal.userId,
-        'WITHDRAWAL_COMPLETE',
+        NotificationType.WITHDRAWAL_COMPLETE,
         'Withdrawal Complete',
         `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} to ${withdrawal.toAddress} has been completed. TX: ${txHash}`,
         { withdrawalId, txHash },
@@ -202,7 +202,7 @@ export class WithdrawalProcessor extends WorkerHost {
 
       await this.notificationService.create(
         withdrawal.userId,
-        'SYSTEM',
+        NotificationType.SYSTEM,
         'Withdrawal Failed',
         `Your withdrawal of ${withdrawal.amount} ${withdrawal.tokenSymbol} has failed. Please contact support.`,
         { withdrawalId, error: failReason },
