@@ -12,9 +12,16 @@ pnpm --filter @joju/utils build
 cd apps/api
 npx prisma generate
 
-# Copy generated .prisma/client to root node_modules so @prisma/client can resolve it
+# Copy generated .prisma/client to root node_modules
 mkdir -p ../../node_modules/.prisma
 cp -r node_modules/.prisma/client ../../node_modules/.prisma/
+
+# Also overwrite the default .prisma/client in pnpm virtual store
+# (pnpm hoists @prisma/client into .pnpm store with a default/uninitialized .prisma/client)
+for dir in $(find ../../node_modules/.pnpm -path "*/.prisma/client" -type d 2>/dev/null); do
+  echo "Copying generated Prisma client to: $dir"
+  cp -r node_modules/.prisma/client/* "$dir/"
+done
 
 # Compile TypeScript without type checking (Prisma types hoisting issue on Vercel)
 rm -rf dist

@@ -66,6 +66,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
     logger: ['error', 'warn', 'log'],
+    abortOnError: false,
   });
 
   app.setGlobalPrefix('v1');
