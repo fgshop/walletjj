@@ -1,6 +1,23 @@
+// ── Fix .prisma/client resolution for pnpm on Vercel ──
+// pnpm hoists @prisma/client into .pnpm virtual store. When it requires
+// '.prisma/client', it finds the uninitialized default instead of our
+// generated client. This patch redirects the resolution.
+const path = require('path');
+const Module = require('module');
+const _generatedPrismaDir = path.resolve(__dirname, '..', 'apps', 'api', 'node_modules', '.prisma', 'client');
+const _origResolve = Module._resolveFilename;
+Module._resolveFilename = function(request, parent, isMain, options) {
+  if (request === '.prisma/client' || request === '.prisma/client/default') {
+    const target = request === '.prisma/client/default'
+      ? path.join(_generatedPrismaDir, 'default.js')
+      : path.join(_generatedPrismaDir, 'index.js');
+    return target;
+  }
+  return _origResolve.apply(this, arguments);
+};
+
 // ── Crash guard ──
 process.on('unhandledRejection', (reason) => {
-  // Suppress Redis ECONNREFUSED in serverless
   if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
     return;
   }
@@ -86,14 +103,6 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Debug: quick test without bootstrap
-  if (req.url === '/v1/ping' || req.url === '/api/ping') {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ pong: true, env: { VERCEL: process.env.VERCEL, NODE_ENV: process.env.NODE_ENV, hasDB: !!process.env.DATABASE_URL } }));
-    return;
-  }
-
   try {
     if (!cachedServer) {
       cachedServer = bootstrap();
@@ -110,7 +119,6 @@ module.exports = async (req, res) => {
       error: {
         code: 'BOOTSTRAP_FAILED',
         message: error.message || 'Server initialization failed',
-        stack: error.stack ? error.stack.split('\n').slice(0, 5) : undefined,
       },
     }));
   }
