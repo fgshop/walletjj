@@ -1,5 +1,6 @@
 {
-  "buildCommand": "cd ../.. && pnpm --filter @joju/types build && pnpm --filter @joju/utils build && pnpm --filter @joju/api build && printf 'module.exports = require(\"../api/index.js\");\\n' > apps/api/dist/main.js",
+  "framework": null,
+  "buildCommand": "cd ../.. && pnpm --filter @joju/types build && pnpm --filter @joju/utils build && cd apps/api && npx prisma generate && rm -rf dist && npx tsc -p tsconfig.vercel.json",
   "outputDirectory": ".",
   "functions": {
     "api/index.js": {
