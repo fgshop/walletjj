@@ -217,6 +217,7 @@ export class AdminWalletsService {
 
   /**
    * Reconcile all wallets: make on-chain balance match off-chain (DB) balance.
+   * Handles both native TRX (JOJU) and all supported TRC-20 tokens (USDT, etc.).
    * Phase 1: Sweep excess (on-chain > off-chain) → sends surplus from user wallet to Hot Wallet.
    * Phase 2: Top up deficit (off-chain > on-chain) → sends deficit from Hot Wallet to user wallet.
    * All movements are recorded as SWEEP transactions (excluded from balance calc).
@@ -232,25 +233,24 @@ export class AdminWalletsService {
     if (!masterWallet) throw new NotFoundException('No active master wallet');
 
     const hotKey = this.cryptoService.decrypt(masterWallet.encryptedKey);
+    const tokens = await this.prisma.supportedToken.findMany({ where: { isActive: true } });
 
     const results: ReconcileResult[] = [];
 
-    // Phase 1: Sweep excess (on-chain > off-chain) — collects funds into Hot Wallet first
+    // Phase 1: Compare & sweep excess for all wallets and all tokens
     for (const wallet of wallets) {
       if (wallet.address === masterWallet.address) continue;
 
+      // --- JOJU (native TRX) ---
       try {
         const onchainSun = Number(await this.tronService.getBalance(wallet.address));
         const onchain = onchainSun / 1_000_000;
         const offchain = await this.walletService.getComputedBalance(wallet.userId, 'JOJU');
-        const diff = offchain - onchain;
+        const diff = offchain - onchain; // positive = deficit, negative = excess
 
         if (Math.abs(diff) < 0.01) {
           results.push({ address: wallet.address, symbol: 'JOJU', onchain, offchain, diff: 0, action: 'synced' });
-          continue;
-        }
-
-        if (diff < 0) {
+        } else if (diff < 0) {
           // On-chain > off-chain → sweep excess to Hot Wallet
           const excessSun = Math.floor(Math.abs(diff) * 1_000_000);
           const userKey = this.cryptoService.decrypt(wallet.encryptedKey);
@@ -262,11 +262,58 @@ export class AdminWalletsService {
           );
           results.push({ address: wallet.address, symbol: 'JOJU', onchain, offchain, diff, action: 'swept-excess', txHash });
         } else {
-          // Mark for Phase 2
           results.push({ address: wallet.address, symbol: 'JOJU', onchain, offchain, diff, action: 'needs-topup' });
         }
       } catch (err) {
         results.push({ address: wallet.address, symbol: 'JOJU', onchain: 0, offchain: 0, diff: 0, action: 'error', error: String(err) });
+      }
+
+      // --- TRC-20 tokens (USDT, etc.) ---
+      for (const token of tokens) {
+        try {
+          let rawBalance: string;
+          try {
+            rawBalance = await this.tronService.getTrc20Balance(wallet.address, token.contractAddress);
+          } catch {
+            // TRC-20 call can fail for accounts with no activity — treat as 0
+            rawBalance = '0';
+          }
+
+          const onchain = token.decimals > 0
+            ? Number(rawBalance) / Math.pow(10, token.decimals)
+            : Number(rawBalance);
+          const offchain = await this.walletService.getComputedBalance(wallet.userId, token.symbol);
+          const diff = offchain - onchain;
+
+          if (Math.abs(diff) < 0.01) {
+            results.push({ address: wallet.address, symbol: token.symbol, onchain, offchain, diff: 0, action: 'synced' });
+          } else if (diff < 0) {
+            // On-chain > off-chain → sweep excess TRC-20 to Hot Wallet
+            const userKey = this.cryptoService.decrypt(wallet.encryptedKey);
+
+            // Ensure user wallet has TRX for gas
+            const senderTrxSun = Number(await this.tronService.getBalance(wallet.address));
+            if (senderTrxSun < 15_000_000) {
+              await this.tronService.sendTrx(hotKey, wallet.address, 15_000_000 - senderTrxSun);
+              await new Promise((r) => setTimeout(r, 3_000));
+            }
+
+            const rawExcess = Math.floor(Math.abs(diff) * Math.pow(10, token.decimals));
+            const txHash = await this.tronService.sendTrc20(
+              userKey, masterWallet.address, token.contractAddress, rawExcess.toString(),
+            );
+
+            await this.recordReconcileTx(
+              txHash, wallet.userId, wallet.address, masterWallet.address,
+              Math.abs(diff).toString(), token.symbol, token.contractAddress, 'reconcile-sweep',
+            );
+            results.push({ address: wallet.address, symbol: token.symbol, onchain, offchain, diff, action: 'swept-excess', txHash });
+          } else {
+            results.push({ address: wallet.address, symbol: token.symbol, onchain, offchain, diff, action: 'needs-topup' });
+          }
+        } catch (err) {
+          results.push({ address: wallet.address, symbol: token.symbol, onchain: 0, offchain: 0, diff: 0, action: 'error', error: String(err) });
+        }
       }
     }
 
@@ -281,23 +328,58 @@ export class AdminWalletsService {
       const wallet = wallets.find((w) => w.address === results[i].address);
       if (!wallet) continue;
 
+      const symbol = results[i].symbol;
+      const isNative = symbol === 'JOJU';
+
       try {
-        const deficitSun = Math.floor(results[i].diff * 1_000_000);
+        if (isNative) {
+          const deficitSun = Math.floor(results[i].diff * 1_000_000);
 
-        // Check Hot Wallet can afford this top-up
-        const hotBalanceSun = Number(await this.tronService.getBalance(masterWallet.address));
-        if (hotBalanceSun < deficitSun + 1_000_000) {
-          results[i] = { ...results[i], action: 'skipped-hot-insufficient' };
-          continue;
+          const hotBalanceSun = Number(await this.tronService.getBalance(masterWallet.address));
+          if (hotBalanceSun < deficitSun + 1_000_000) {
+            results[i] = { ...results[i], action: 'skipped-hot-insufficient' };
+            continue;
+          }
+
+          const txHash = await this.tronService.sendTrx(hotKey, wallet.address, deficitSun);
+
+          await this.recordReconcileTx(
+            txHash, wallet.userId, masterWallet.address, wallet.address,
+            results[i].diff.toString(), 'JOJU', null, 'reconcile-topup',
+          );
+          results[i] = { ...results[i], action: 'topped-up', txHash };
+        } else {
+          // TRC-20 top-up from Hot Wallet
+          const token = tokens.find((t) => t.symbol === symbol);
+          if (!token) {
+            results[i] = { ...results[i], action: 'error', error: `Token ${symbol} not found` };
+            continue;
+          }
+
+          const rawDeficit = Math.floor(results[i].diff * Math.pow(10, token.decimals));
+
+          // Check hot wallet has enough of this token
+          let hotTokenRaw: string;
+          try {
+            hotTokenRaw = await this.tronService.getTrc20Balance(masterWallet.address, token.contractAddress);
+          } catch {
+            hotTokenRaw = '0';
+          }
+          if (Number(hotTokenRaw) < rawDeficit) {
+            results[i] = { ...results[i], action: 'skipped-hot-insufficient' };
+            continue;
+          }
+
+          const txHash = await this.tronService.sendTrc20(
+            hotKey, wallet.address, token.contractAddress, rawDeficit.toString(),
+          );
+
+          await this.recordReconcileTx(
+            txHash, wallet.userId, masterWallet.address, wallet.address,
+            results[i].diff.toString(), token.symbol, token.contractAddress, 'reconcile-topup',
+          );
+          results[i] = { ...results[i], action: 'topped-up', txHash };
         }
-
-        const txHash = await this.tronService.sendTrx(hotKey, wallet.address, deficitSun);
-
-        await this.recordReconcileTx(
-          txHash, wallet.userId, masterWallet.address, wallet.address,
-          results[i].diff.toString(), 'JOJU', null, 'reconcile-topup',
-        );
-        results[i] = { ...results[i], action: 'topped-up', txHash };
       } catch (err) {
         results[i] = { ...results[i], action: 'topup-error', error: String(err) };
       }
@@ -310,6 +392,7 @@ export class AdminWalletsService {
         toppedUp: results.filter((r) => r.action === 'topped-up').length,
         synced: results.filter((r) => r.action === 'synced').length,
         errors: results.filter((r) => r.action.includes('error')).length,
+        skipped: results.filter((r) => r.action.includes('skipped')).length,
       },
       ipAddress,
     );

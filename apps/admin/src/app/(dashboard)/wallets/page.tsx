@@ -177,13 +177,18 @@ export default function WalletsPage() {
     try {
       const res = await api.post('/admin/wallets/migrate-balances');
       const data = res.data.data || res.data;
-      const migrated = (data.results || []).filter((r: any) => r.status === 'migrated').length;
-      const skipped = (data.results || []).filter((r: any) => r.status === 'already-migrated').length;
-      setMigrateResult(`마이그레이션 완료: ${migrated}건 처리, ${skipped}건 스킵`);
+      const results = data.results || [];
+      const migrated = results.filter((r: any) => r.status === 'migrated').length;
+      const skipped = results.filter((r: any) => r.status === 'already-migrated').length;
+      const errors = results.filter((r: any) => r.status === 'error').length;
+      const parts = [`${migrated}건 처리`, `${skipped}건 스킵`];
+      if (errors > 0) parts.push(`${errors}건 오류`);
+      setMigrateResult(`마이그레이션 완료: ${parts.join(', ')}`);
       const items = await fetchWallets();
       if (items.length > 0) fetchBalances(items);
-    } catch {
-      setMigrateResult('마이그레이션 실패');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message || err?.message || '';
+      setMigrateResult(`마이그레이션 실패${msg ? ': ' + msg : ''}`);
     } finally {
       setMigrateLoading(false);
     }
@@ -224,12 +229,17 @@ export default function WalletsPage() {
       const swept = results.filter((r: any) => r.action === 'swept-excess').length;
       const topped = results.filter((r: any) => r.action === 'topped-up').length;
       const synced = results.filter((r: any) => r.action === 'synced').length;
+      const skipped = results.filter((r: any) => r.action.includes('skipped')).length;
       const errors = results.filter((r: any) => r.action.includes('error')).length;
-      setReconcileResult(`동기화 완료: ${synced}건 일치, ${swept}건 회수, ${topped}건 보충${errors > 0 ? `, ${errors}건 오류` : ''}`);
+      const parts = [`${synced}건 일치`, `${swept}건 회수`, `${topped}건 보충`];
+      if (skipped > 0) parts.push(`${skipped}건 잔액부족`);
+      if (errors > 0) parts.push(`${errors}건 오류`);
+      setReconcileResult(`동기화 완료: ${parts.join(', ')}`);
       const items = await fetchWallets();
       if (items.length > 0) fetchBalances(items);
-    } catch {
-      setReconcileResult('동기화 실패');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message || err?.message || '';
+      setReconcileResult(`동기화 실패${msg ? ': ' + msg : ''}`);
     } finally {
       setReconcileLoading(false);
     }
