@@ -86,6 +86,14 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Debug: quick test without bootstrap
+  if (req.url === '/v1/ping' || req.url === '/api/ping') {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ pong: true, env: { VERCEL: process.env.VERCEL, NODE_ENV: process.env.NODE_ENV, hasDB: !!process.env.DATABASE_URL } }));
+    return;
+  }
+
   try {
     if (!cachedServer) {
       cachedServer = bootstrap();
