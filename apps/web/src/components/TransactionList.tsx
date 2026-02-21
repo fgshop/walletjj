@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { TxStatus, TxType, WithdrawalStatus } from '@joju/types';
 
 interface TransactionItem {
@@ -97,7 +98,20 @@ function getCounterparty(tx: TransactionItem, isOutgoing: boolean): string {
   return tx.fromAddress ? `← ${tx.fromAddress.slice(0, 8)}...${tx.fromAddress.slice(-6)}` : '';
 }
 
+function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <span className="shrink-0 text-[11px] text-gray-500">{label}</span>
+      <span className={`text-right text-[11px] text-gray-300 break-all ${mono ? 'font-mono' : ''}`}>{value}</span>
+    </div>
+  );
+}
+
 export default function TransactionList({ transactions, loading, currentUserId }: TransactionListProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
+
   if (loading) {
     return (
       <div className="divide-y divide-white/[0.06]">
@@ -142,30 +156,70 @@ export default function TransactionList({ transactions, loading, currentUserId }
           ? (isOutgoing ? '내부 송금' : '내부 수신')
           : config.label;
 
+        const isExpanded = expandedId === tx.id;
+
         return (
-          <div key={tx.id} className="flex items-center gap-3 py-3.5 transition-colors hover:bg-white/[0.02]">
-            {typeIcon(isOutgoing)}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium text-white">{typeLabel}</span>
-                <span className={`rounded-full border px-1.5 py-px text-[9px] font-semibold ${config.sourceClass}`}>
-                  {config.source}
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
-                  {badge.label}
-                </span>
+          <div key={tx.id}>
+            <button
+              onClick={() => toggle(tx.id)}
+              className="flex w-full items-center gap-3 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
+            >
+              {typeIcon(isOutgoing)}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-white">{typeLabel}</span>
+                  <span className={`rounded-full border px-1.5 py-px text-[9px] font-semibold ${config.sourceClass}`}>
+                    {config.source}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-xs text-gray-500">
+                  {getCounterparty(tx, isOutgoing)}
+                </p>
               </div>
-              <p className="mt-0.5 truncate text-xs text-gray-500">
-                {getCounterparty(tx, isOutgoing)}
-              </p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className={`text-sm font-semibold ${isOutgoing ? 'text-red-400' : 'text-green-400'}`}>
-                {isOutgoing ? '-' : '+'}{formatAmount(tx.amount, tx.tokenDecimals)} {tx.tokenSymbol}
-              </p>
-              <p className="text-[10px] text-gray-500">
-                {new Date(tx.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </p>
+              <div className="shrink-0 text-right">
+                <p className={`text-sm font-semibold ${isOutgoing ? 'text-red-400' : 'text-green-400'}`}>
+                  {isOutgoing ? '-' : '+'}{formatAmount(tx.amount, tx.tokenDecimals)} {tx.tokenSymbol}
+                </p>
+                <p className="text-[10px] text-gray-500">
+                  {new Date(tx.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+              <svg
+                className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Expandable details */}
+            <div
+              className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                isExpanded ? 'max-h-60 opacity-100' : 'max-h-0 opacity-0'
+              }`}
+            >
+              <div className="mb-3 ml-[52px] space-y-1.5 rounded-xl bg-white/[0.03] p-3">
+                <DetailRow label="유형" value={typeLabel} />
+                <DetailRow label="금액" value={`${formatAmount(tx.amount, tx.tokenDecimals)} ${tx.tokenSymbol}`} />
+                <DetailRow label="보낸 주소" value={tx.fromAddress} mono />
+                <DetailRow label="받는 주소" value={tx.toAddress} mono />
+                {tx.txHash && (
+                  <DetailRow label="TX Hash" value={tx.txHash} mono />
+                )}
+                {tx.memo && (
+                  <DetailRow label="메모" value={tx.memo} />
+                )}
+                <DetailRow
+                  label="일시"
+                  value={new Date(tx.createdAt).toLocaleString('ko-KR', {
+                    year: 'numeric', month: 'long', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                  })}
+                />
+              </div>
             </div>
           </div>
         );

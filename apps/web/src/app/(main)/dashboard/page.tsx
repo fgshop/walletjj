@@ -21,8 +21,10 @@ interface NotificationItem {
   type: NotificationType;
   title: string;
   message: string;
+  body?: string;
   isRead: boolean;
   createdAt: string;
+  data?: Record<string, unknown> | null;
 }
 
 const withdrawalStatusConfig: Record<WithdrawalStatus, { label: string; className: string; icon: string }> = {
@@ -82,6 +84,7 @@ export default function DashboardPage() {
   const [notiLoading, setNotiLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [expandedNotiId, setExpandedNotiId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     // Fire all requests in parallel
@@ -261,28 +264,50 @@ export default function DashboardPage() {
           <div className="glass-card divide-y divide-white/[0.04] overflow-hidden">
             {notifications.map((n) => {
               const icon = notifTypeIcons[n.type] || notifTypeIcons.SYSTEM;
+              const isExpanded = expandedNotiId === n.id;
               return (
-                <div
-                  key={n.id}
-                  className={`flex items-start gap-3 p-3.5 transition-all duration-300 hover:bg-white/[0.03] ${
-                    !n.isRead ? 'bg-purple-500/[0.04]' : ''
-                  }`}
-                >
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${icon.bg}`}>
-                    <svg className={`h-4 w-4 ${icon.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon.path} />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-medium text-white">{n.title}</span>
-                      {!n.isRead && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400 shadow-sm shadow-purple-400/50" />
-                      )}
+                <div key={n.id}>
+                  <button
+                    onClick={() => setExpandedNotiId(prev => prev === n.id ? null : n.id)}
+                    className={`flex w-full items-start gap-3 p-3.5 text-left transition-all duration-300 hover:bg-white/[0.03] ${
+                      !n.isRead ? 'bg-purple-500/[0.04]' : ''
+                    }`}
+                  >
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${icon.bg}`}>
+                      <svg className={`h-4 w-4 ${icon.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon.path} />
+                      </svg>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-gray-500">{n.message}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] font-medium text-white">{n.title}</span>
+                        {!n.isRead && (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400 shadow-sm shadow-purple-400/50" />
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-gray-500">{n.message}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                      <span className="text-[10px] text-gray-600">{timeAgo(n.createdAt)}</span>
+                      <svg
+                        className={`h-3.5 w-3.5 text-gray-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </button>
+                  <div className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                    <div className="mx-3.5 mb-3 space-y-1 rounded-lg bg-white/[0.03] p-3">
+                      <p className="text-xs text-gray-300">{n.body || n.message}</p>
+                      <p className="text-[10px] text-gray-500">
+                        {new Date(n.createdAt).toLocaleString('ko-KR', {
+                          year: 'numeric', month: 'long', day: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
                   </div>
-                  <span className="shrink-0 pt-0.5 text-[10px] text-gray-600">{timeAgo(n.createdAt)}</span>
                 </div>
               );
             })}
