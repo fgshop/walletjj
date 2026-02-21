@@ -55,6 +55,22 @@ const express = require('express');
 let cachedServer;
 
 async function bootstrap() {
+  console.log('[Vercel] Env check:', {
+    TRON_FULL_HOST: process.env.TRON_FULL_HOST || 'UNSET',
+    DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'UNSET',
+    NODE_ENV: process.env.NODE_ENV || 'UNSET',
+    VERCEL: process.env.VERCEL || 'UNSET',
+  });
+  // Quick TronWeb sanity test
+  try {
+    const { TronWeb: TW } = require('tronweb');
+    const testHost = process.env.TRON_FULL_HOST || 'https://api.shasta.trongrid.io';
+    console.log('[Vercel] TronWeb test with host:', testHost);
+    const tw = new TW({ fullHost: testHost });
+    console.log('[Vercel] TronWeb init OK');
+  } catch (e) {
+    console.error('[Vercel] TronWeb test FAILED:', e.message);
+  }
   const server = express();
   const { NestFactory } = require('@nestjs/core');
   const { ValidationPipe } = require('@nestjs/common');
