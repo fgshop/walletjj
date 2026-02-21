@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Build from repo root
-cd ../..
+# This script runs from the project ROOT (Root Directory = empty in Vercel settings)
+# The buildCommand in root vercel.json: "bash apps/api/scripts/vercel-build.sh"
 
 # Build shared packages
 pnpm --filter @joju/types build
