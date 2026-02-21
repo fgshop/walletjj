@@ -1,26 +1,23 @@
 #!/bin/bash
 set -e
 
-echo "=== Build starting ==="
-echo "PWD: $(pwd)"
-echo "Contents: $(ls -la)"
-echo "Node: $(node --version)"
+# This script runs from the project ROOT via: bash apps/api/scripts/vercel-build.sh
 
-# Build shared packages first
+# Build shared packages
 pnpm --filter @joju/types build
 pnpm --filter @joju/utils build
 
-# Generate Prisma client from apps/api
+# Generate Prisma client
 cd apps/api
 npx prisma generate
 
-# Copy generated .prisma/client everywhere it's needed
+# Copy generated .prisma/client to root node_modules
 mkdir -p ../../node_modules/.prisma
 cp -r node_modules/.prisma/client ../../node_modules/.prisma/
 
 # Overwrite default .prisma/client in pnpm virtual store
-for dir in $(find ../../node_modules/.pnpm -path "*/.prisma/client" -type d 2>/dev/null); do
-  echo "Copying Prisma to: $dir"
+find ../../node_modules/.pnpm -path "*/.prisma/client" -type d 2>/dev/null | while read -r dir; do
+  echo "Patching Prisma client at: $dir"
   cp -r node_modules/.prisma/client/* "$dir/" 2>/dev/null || true
 done
 
@@ -28,4 +25,4 @@ done
 rm -rf dist
 npx tsc -p tsconfig.vercel.json
 
-echo "=== Build completed ==="
+echo "Build completed successfully"
