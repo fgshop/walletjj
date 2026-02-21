@@ -13,8 +13,10 @@ process.on('uncaughtException', (err) => {
   console.error('[Vercel] Uncaught Exception:', err);
 });
 
-// ── Help @vercel/nft trace Prisma + ESM-only packages ──
+// ── Help @vercel/nft trace Prisma + shared packages + ESM-only packages ──
 try { require('../apps/api/node_modules/.prisma/client'); } catch (_) {}
+try { require('@joju/types'); } catch (_) {}
+try { require('@joju/utils'); } catch (_) {}
 import('@scure/bip32').catch(() => {});
 import('@scure/bip39').catch(() => {});
 import('@scure/bip39/wordlists/english.js').catch(() => {});
@@ -100,6 +102,7 @@ module.exports = async (req, res) => {
       error: {
         code: 'BOOTSTRAP_FAILED',
         message: error.message || 'Server initialization failed',
+        stack: error.stack ? error.stack.split('\n').slice(0, 5) : undefined,
       },
     }));
   }
