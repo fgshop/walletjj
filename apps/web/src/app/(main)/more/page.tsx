@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getUser, logout } from '@/lib/auth';
+import { applyFontSize, getFontSizeLevel, FONT_SIZE_OPTIONS } from '@/components/FontSizeInit';
 
 interface UserInfo {
   name: string;
@@ -43,10 +44,18 @@ const menuSections = [
 export default function MorePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [fontLevel, setFontLevel] = useState('medium');
+  const [fontOpen, setFontOpen] = useState(false);
 
   useEffect(() => {
     getUser().then(setUser).catch(() => {});
+    setFontLevel(getFontSizeLevel());
   }, []);
+
+  const handleFontChange = (level: string) => {
+    setFontLevel(level);
+    applyFontSize(level);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -100,6 +109,74 @@ export default function MorePage() {
           </div>
         </div>
       ))}
+
+      {/* Font Size Setting */}
+      <div className="mb-5">
+        <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-gray-500">글꼴</h2>
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+          <button
+            onClick={() => setFontOpen(!fontOpen)}
+            className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.05]">
+              <svg className="h-[18px] w-[18px] text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h8m-8 6h16" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white">글꼴 크기</p>
+              <p className="text-[11px] text-gray-500">
+                {FONT_SIZE_OPTIONS.find(o => o.key === fontLevel)?.label || '보통'}
+              </p>
+            </div>
+            <svg
+              className={`h-4 w-4 shrink-0 text-gray-600 transition-transform duration-200 ${fontOpen ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <div className={`overflow-hidden transition-all duration-200 ease-in-out ${fontOpen ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="border-t border-white/[0.06] px-4 py-3 space-y-2">
+              {FONT_SIZE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => handleFontChange(opt.key)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${
+                    fontLevel === opt.key
+                      ? 'bg-purple-500/15 border border-purple-500/30'
+                      : 'bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="font-medium text-white"
+                      style={{ fontSize: `${opt.size}px` }}
+                    >
+                      가
+                    </span>
+                    <div>
+                      <p className={`text-sm font-medium ${fontLevel === opt.key ? 'text-purple-300' : 'text-white'}`}>
+                        {opt.label}
+                      </p>
+                      <p className="text-[10px] text-gray-500">{opt.desc}</p>
+                    </div>
+                  </div>
+                  {fontLevel === opt.key && (
+                    <svg className="h-5 w-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+              <p className="text-center text-[10px] text-gray-500 pt-1">
+                변경 즉시 전체 화면에 적용됩니다
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Logout */}
       <button

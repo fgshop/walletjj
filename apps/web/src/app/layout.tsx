@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import FontSizeInit from '@/components/FontSizeInit';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
       </head>
-      <body className="bg-[#06060f] text-white antialiased">{children}</body>
+      <body className="bg-[#06060f] text-white antialiased">
+        <FontSizeInit />
+        {children}
+      </body>
     </html>
   );
 }
