@@ -1,6 +1,22 @@
+// ── Fix .prisma/client resolution for pnpm on Vercel ──
+// pnpm hoists @prisma/client into .pnpm virtual store where it resolves
+// to the uninitialized default .prisma/client instead of our generated one.
+const path = require('path');
+const Module = require('module');
+const _generatedPrismaDir = path.resolve(__dirname, '..', 'node_modules', '.prisma', 'client');
+const _origResolve = Module._resolveFilename;
+Module._resolveFilename = function(request, parent, isMain, options) {
+  if (request === '.prisma/client' || request === '.prisma/client/default') {
+    const target = request === '.prisma/client/default'
+      ? path.join(_generatedPrismaDir, 'default.js')
+      : path.join(_generatedPrismaDir, 'index.js');
+    return target;
+  }
+  return _origResolve.apply(this, arguments);
+};
+
 // ── Crash guard ──
 process.on('unhandledRejection', (reason) => {
-  // Suppress Redis ECONNREFUSED in serverless
   if (reason && (reason.code === 'ECONNREFUSED' || (reason.message && reason.message.includes('Connection is closed')))) {
     return;
   }
@@ -13,8 +29,10 @@ process.on('uncaughtException', (err) => {
   console.error('[Vercel] Uncaught Exception:', err);
 });
 
-// ── Help @vercel/nft trace Prisma + ESM-only packages ──
+// ── Help @vercel/nft trace Prisma + shared packages + ESM-only packages ──
 try { require('../node_modules/.prisma/client'); } catch (_) {}
+try { require('@joju/types'); } catch (_) {}
+try { require('@joju/utils'); } catch (_) {}
 import('@scure/bip32').catch(() => {});
 import('@scure/bip39').catch(() => {});
 import('@scure/bip39/wordlists/english.js').catch(() => {});
@@ -47,6 +65,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
     logger: ['error', 'warn', 'log'],
+    abortOnError: false,
   });
 
   app.setGlobalPrefix('v1');
