@@ -11,6 +11,8 @@ interface Withdrawal {
   amount: string;
   toAddress: string;
   status: string;
+  reviewNote?: string;
+  failReason?: string;
   createdAt: string;
   user?: { email: string; name: string };
   [key: string]: unknown;
@@ -106,7 +108,19 @@ export default function WithdrawalsPage() {
     {
       key: 'status',
       label: '상태',
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => {
+        const tooltip =
+          row.status === 'FAILED' && row.failReason
+            ? `실패 사유: ${row.failReason}`
+            : row.status === 'REJECTED' && row.reviewNote
+              ? `거부 사유: ${row.reviewNote}`
+              : undefined;
+        return (
+          <span title={tooltip} className={tooltip ? 'cursor-help underline decoration-dotted decoration-red-400/50 underline-offset-2' : ''}>
+            <StatusBadge status={row.status} />
+          </span>
+        );
+      },
     },
     {
       key: 'createdAt',
